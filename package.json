@@ -67,7 +67,7 @@
     "tailwindcss": "^3.4.19",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.7"
+    "vitest": "^5.1.0"
   },
   "overrides": {
     "deepmerge-ts": "^8.0.0",

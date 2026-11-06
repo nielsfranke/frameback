@@ -77,6 +77,9 @@
     },
     "next": {
       "postcss": "$postcss"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
     }
   }
 }

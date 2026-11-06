@@ -9,7 +9,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-STAGE_DIR="${STAGE_DIR:-~/vitransfer-next}"
+STAGE_DIR="${STAGE_DIR:-${HOME}/vitransfer-next}"
 ENV_FILE="$STAGE_DIR/.env"
 PROJECT="vitransfer-next"
 LIVE_PG_CONTAINER="${LIVE_PG_CONTAINER:-vitransfer-postgres}"

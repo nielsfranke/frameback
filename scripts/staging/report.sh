@@ -3,7 +3,7 @@
 # Reads live row counts read-only for comparison.
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-STAGE_DIR="${STAGE_DIR:-~/vitransfer-next}"
+STAGE_DIR="${STAGE_DIR:-${HOME}/vitransfer-next}"
 # Reusable for the cutover: PROJECT, ENV_FILE, COMPOSE_ARGS and REPORT_MODE can be overridden
 PROJECT="${PROJECT:-vitransfer-next}"
 ENV_FILE="${ENV_FILE:-$STAGE_DIR/.env}"

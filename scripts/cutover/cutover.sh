@@ -14,8 +14,8 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-LIVE_DIR="${LIVE_DIR:-~/vitransfer}"
-PROD_DIR="${PROD_DIR:-~/frameback}"
+LIVE_DIR="${LIVE_DIR:-${HOME}/vitransfer}"
+PROD_DIR="${PROD_DIR:-${HOME}/frameback}"
 ENV_FILE="$PROD_DIR/.env"
 # Overridable for the tooling's own tests (e.g. staging as stand-in for live, see docs)
 LIVE_APP="${LIVE_APP:-vitransfer-app}" LIVE_WORKER="${LIVE_WORKER:-vitransfer-worker}"

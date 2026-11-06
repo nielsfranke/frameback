@@ -1,6 +1,6 @@
 -- Runs against the STAGING database right after restoring a live dump and
 -- BEFORE app/worker start. Removes every way staging could reach real people.
--- Usage: psql -v app_domain='http://staging-host:4325' -f sanitize.sql
+-- Usage: psql -v app_domain='http://<staging-host>:4325' -f sanitize.sql
 \set ON_ERROR_STOP on
 BEGIN;
 

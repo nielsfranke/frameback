@@ -1,13 +1,13 @@
 # ViTransfer Redesign – Umsetzungsplan (v3)
 
-Stand: 06.11.2026 · v3 mit Entscheidungen von Niels · Prototyp: `http://staging-host:4173`
+Stand: 06.11.2026 · v3 mit Entscheidungen des Betreibers
 
 > **Entscheidungen (06.11.2026):**
 > 1. Fork mit Feature-Flags und kleinen Commits auf `main`
 > 2. Freigabe zum Start mit `ANY` (eine Person reicht), `ALL` kommt später
 > 3. **Ordner dienen nur der Organisation im Studio. Geteilt und freigegeben werden ausschließlich Projekte.** Für einen Kunden mit mehreren Projekten gibt es das bestehende Kundenportal. Ordner-Shares (`ShareLink`, früher S3) entfallen.
 > 4. Kunden-Ordner aus `ClientCompany` vorschlagen, darin Jahres-Unterordner nach den vorhandenen Projektjahren
-> 5. Staging nur im LAN bzw. über WireGuard, **kein Tailscale**. HTTPS über Caddys interne Zertifizierungsstelle auf `https://staging-host:4326` (das MCP vertraut ihr per `SSL_CERT_FILE`). Produktiv läuft der Fork unter `https://review.example.com`.
+> 5. Staging nur im LAN bzw. über WireGuard, **kein Tailscale**. HTTPS über Caddys interne Zertifizierungsstelle auf den Staging-Host im LAN (das MCP vertraut ihr per `SSL_CERT_FILE`). Produktiv läuft der Fork unter `https://review.example.com`.
 > 6. Sitzungen beim Umstieg: Neuanmeldung (Variante B)
 > 7. Sprachen nur noch `de` und `en`, `nl` wird entfernt
 
@@ -356,7 +356,7 @@ Wie in v1, ergänzt:
 3. Finaler `pg_dump`, `rsync` der Differenz der Uploads, **Redis-Snapshot (RDB)** sichern.
 4. Restore, Migration, Rückfüllung, Prüfbericht. **Abbruch, wenn eine Prüfung fehlschlägt** (Live-System wieder starten).
 5. **Abnahmefenster ohne Schreibzugriffe:** Der neue Stack läuft hinter der Wartungsseite, nur du testest (Proxy erlaubt nur deine IP oder Tailscale). Bis hier ist ein Rollback trivial.
-6. Öffnen: Der Proxy schaltet auf den neuen Stack. `review.example.com` zeigt auf proxy-host, das von dort (vermutlich per WireGuard) auf den DeskMini weiterleitet. Umgestellt wird entweder das Upstream dort, oder der neue Stack übernimmt Port 4324. Die Domain bleibt gleich.
+6. Öffnen: Der Proxy schaltet auf den neuen Stack. Der externe Reverse Proxy leitet weiter auf den Host; der neue Stack übernimmt dort Port 4324 (Entscheidung), am Proxy ändert sich nichts. Die Domain bleibt gleich.
 7. **Ab dem ersten Kundenschreibzugriff (Kommentar, Entscheidung, Upload) gibt es keinen Rollback mehr, nur noch Fixes nach vorn.** Der alte Stack und die Volumes bleiben 14 Tage gestoppt als Datensicherung. Ein Backup samt Wiederherstellung wird vorher einmal real getestet.
 
 ### 8.4 Redis und Sitzungen

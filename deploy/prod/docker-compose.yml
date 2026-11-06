@@ -3,8 +3,8 @@
 #   docker compose -p frameback --env-file ~/frameback/.env \
 #     -f deploy/prod/docker-compose.yml up -d
 #
-# Mirrors the live setup (~/vitransfer): the app publishes APP_PORT (4324),
-# the front proxy for review.example.com keeps pointing at it. Unlike staging, app and
+# Mirrors the old live setup (~/vitransfer): the app publishes APP_PORT (4324),
+# the external front proxy keeps pointing at it. Unlike staging, app and
 # worker have internet access (SMTP, web push, webhooks).
 # Same major versions as live (Postgres 16, Redis 7); upgrades happen separately.
 # No container_name: the old vitransfer-* containers stay untouched for rollback.

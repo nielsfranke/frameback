@@ -8,7 +8,7 @@
 	admin off
 	auto_https disable_redirects
 	skip_install_trust
-	default_sni staging-host
+	default_sni {$STAGING_HOST}
 }
 
 http://:4325 {
@@ -16,7 +16,7 @@ http://:4325 {
 	reverse_proxy app:4321
 }
 
-https://staging-host:4326 {
+https://{$STAGING_HOST}:4326 {
 	tls internal
 	encode zstd gzip
 	reverse_proxy app:4321

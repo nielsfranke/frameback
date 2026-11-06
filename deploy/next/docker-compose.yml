@@ -117,6 +117,9 @@ services:
     ports:
       - "${STAGING_PORT:-4325}:4325"
       - "${STAGING_TLS_PORT:-4326}:4326"
+    environment:
+      # LAN address of the staging host (internal-CA certificate for the IP / name)
+      STAGING_HOST: ${STAGING_HOST:?STAGING_HOST is required, e.g. the host's LAN IP}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

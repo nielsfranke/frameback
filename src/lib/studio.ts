@@ -17,6 +17,8 @@ export interface ProjectSummary {
   slug: string
   status: string
   archived: boolean
+  /** Studio marked it done ("Abgeschlossen"); share link stays live */
+  completed: boolean
   createdAt: string
   dueDate: string | null
   client: { id: string; name: string } | null
@@ -96,7 +98,7 @@ async function lastActivity(projectIds: string[]): Promise<Map<string, LastActiv
 export async function projectSummaries(userId: string): Promise<ProjectSummary[]> {
   const projects = await prisma.project.findMany({
     select: {
-      id: true, title: true, slug: true, status: true, createdAt: true, dueDate: true, companyName: true,
+      id: true, title: true, slug: true, status: true, createdAt: true, dueDate: true, companyName: true, completedAt: true,
       clientCompany: { select: { id: true, name: true } },
       folder: { select: { id: true, name: true } },
     },
@@ -139,6 +141,7 @@ export async function projectSummaries(userId: string): Promise<ProjectSummary[]
       slug: p.slug,
       status: p.status,
       archived: p.status === 'ARCHIVED',
+      completed: p.completedAt !== null,
       createdAt: p.createdAt.toISOString(),
       dueDate: p.dueDate ? p.dueDate.toISOString() : null,
       client: p.clientCompany,

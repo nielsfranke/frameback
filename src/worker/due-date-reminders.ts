@@ -46,6 +46,7 @@ export async function processDueDateReminders() {
       },
       dueReminder: 'DAY_BEFORE',
       status: { notIn: ['APPROVED', 'ARCHIVED'] },
+      completedAt: null,
     },
     select: { id: true, title: true, dueDate: true },
   })
@@ -59,6 +60,7 @@ export async function processDueDateReminders() {
       },
       dueReminder: 'WEEK_BEFORE',
       status: { notIn: ['APPROVED', 'ARCHIVED'] },
+      completedAt: null,
     },
     select: { id: true, title: true, dueDate: true },
   })

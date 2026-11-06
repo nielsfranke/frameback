@@ -23,6 +23,9 @@ interface Detail {
   recipientSuggestions: Array<{ name: string | null; email: string; projects: string[] }>
 }
 
+/** The API answers with localized messages (duplicate name, invalid email …) */
+const serverMessage = (e: unknown) => (e instanceof Error && e.message && !/^HTTP \d/.test(e.message) ? e.message : null)
+
 export default function StudioClient({ id }: { id: string }) {
   const t = useTranslations('studio.clients')
   const ts = useTranslations('studio')
@@ -35,6 +38,9 @@ export default function StudioClient({ id }: { id: string }) {
   const [moving, setMoving] = useState<string[] | null>(null)
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState('')
+  /** contact being edited; id null = new contact */
+  const [contact, setContact] = useState<{ id: string | null; name: string; email: string } | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -69,7 +75,25 @@ export default function StudioClient({ id }: { id: string }) {
     } catch { toast(ts('actionFailed')) }
   }
   const rename = async () => {
-    try { await apiPatch(`/api/clients/${id}`, { name: name.trim() }); setRenaming(false); await load(); void reloadOverview() } catch { toast(ts('actionFailed')) }
+    setBusy(true)
+    try { await apiPatch(`/api/clients/${id}`, { name: name.trim() }); setRenaming(false); await load(); void reloadOverview() }
+    catch (e) { toast(serverMessage(e) ?? ts('actionFailed')) }
+    finally { setBusy(false) }
+  }
+  const saveContact = async () => {
+    if (!contact) return
+    const body = { name: contact.name.trim(), email: contact.email.trim() || null }
+    setBusy(true)
+    try {
+      if (contact.id) await apiPatch(`/api/clients/${id}/contacts/${contact.id}`, body)
+      else await apiPost(`/api/clients/${id}/contacts`, body)
+      setContact(null)
+      await load()
+    } catch (e) { toast(serverMessage(e) ?? ts('actionFailed')) } finally { setBusy(false) }
+  }
+  const removeContact = async (c: Detail['contacts'][number]) => {
+    if (!window.confirm(t('removeContactConfirm', { name: c.name }))) return
+    try { await apiDelete(`/api/clients/${id}/contacts/${c.id}`); toast(t('contactRemoved', { name: c.name })); await load() } catch { toast(ts('actionFailed')) }
   }
   const remove = async () => {
     if (!window.confirm(t('deleteConfirm', { name: detail.name, n: mine.length }))) return
@@ -90,9 +114,11 @@ export default function StudioClient({ id }: { id: string }) {
           </div>
         </div>
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" onClick={() => { setName(detail.name); setRenaming(true) }}><Pencil className="mr-1.5 h-4 w-4" />{t('edit')}</Button>
           <Button asChild><Link href={`/admin/projects/new?client=${id}`}><Plus className="mr-1.5 h-4 w-4" />{ts('newProject')}</Link></Button>
           <Menu label={t('clientActions')} trigger={<MoreHorizontal className="h-4 w-4" />} items={[
             { label: t('rename'), icon: <Pencil className="h-4 w-4" />, onSelect: () => { setName(detail.name); setRenaming(true) } },
+            { label: t('addContact'), icon: <UserPlus className="h-4 w-4" />, onSelect: () => setContact({ id: null, name: '', email: '' }) },
             { label: t('delete'), icon: <Trash2 className="h-4 w-4" />, danger: true, separatorBefore: true, onSelect: remove },
           ]} />
         </div>
@@ -113,14 +139,21 @@ export default function StudioClient({ id }: { id: string }) {
       <div className="mb-2 mt-7 flex items-baseline gap-3">
         <h2 className="text-[15px] font-semibold">{t('contacts')}</h2>
         <span className="text-xs text-muted-foreground">{t('contactsHint')}</span>
+        <Button size="sm" variant="outline" className="ml-auto" onClick={() => setContact({ id: null, name: '', email: '' })}><UserPlus className="mr-1.5 h-3.5 w-3.5" />{t('addContact')}</Button>
       </div>
       {detail.contacts.length === 0 && detail.recipientSuggestions.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{t('noContacts')}</div>
       ) : (
         <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {detail.contacts.map((c) => (
-            <div key={c.id} className="rounded-xl border border-border bg-card p-3.5 text-[13px]">
-              <b className="block text-sm">{c.name}</b>
+            <div key={c.id} className="relative rounded-xl border border-border bg-card p-3.5 pr-11 text-[13px]">
+              <div className="absolute right-1.5 top-1.5">
+                <Menu label={t('contactActions', { name: c.name })} trigger={<MoreHorizontal className="h-4 w-4" />} items={[
+                  { label: t('editContact'), icon: <Pencil className="h-4 w-4" />, onSelect: () => setContact({ id: c.id, name: c.name, email: c.email ?? '' }) },
+                  { label: t('removeContact'), icon: <Trash2 className="h-4 w-4" />, danger: true, separatorBefore: true, onSelect: () => void removeContact(c) },
+                ]} />
+              </div>
+              <b className="block break-words text-sm">{c.name}</b>
               {c.email && <a href={`mailto:${c.email}`} className="inline-flex items-center gap-1 text-primary hover:underline"><Mail className="h-3 w-3" />{c.email}</a>}
               {c.projects.length > 0 && <div className="mt-1.5 text-xs text-muted-foreground">{t('recipientIn', { projects: c.projects.join(', ') })}</div>}
             </div>
@@ -139,10 +172,27 @@ export default function StudioClient({ id }: { id: string }) {
       <MoveDialog projectIds={moving} titleText={moving?.length === 1 ? ts('moveOneTitle', { title: mine.find((p) => p.id === moving[0])?.title ?? '' }) : ts('moveManyTitle', { n: moving?.length ?? 0 })} onOpenChange={(o) => { if (!o) setMoving(null) }} />
       <Dialog open={renaming} onOpenChange={setRenaming}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>{t('rename')}</DialogTitle><DialogDescription>{t('renameHint')}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{t('editClient')}</DialogTitle><DialogDescription>{t('renameHint')}</DialogDescription></DialogHeader>
           <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) void rename() }}>
-            <Input autoFocus value={name} maxLength={200} onChange={(e) => setName(e.target.value)} aria-label={t('clientName')} />
-            <DialogFooter className="mt-4"><Button type="button" variant="outline" onClick={() => setRenaming(false)}>{ts('cancel')}</Button><Button type="submit" disabled={!name.trim()}>{ts('save')}</Button></DialogFooter>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground" htmlFor="fb-client-name">{t('clientName')}</label>
+            <Input id="fb-client-name" autoFocus value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
+            <DialogFooter className="mt-4"><Button type="button" variant="outline" onClick={() => setRenaming(false)}>{ts('cancel')}</Button><Button type="submit" disabled={!name.trim() || busy}>{ts('save')}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!contact} onOpenChange={(o) => { if (!o) setContact(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{contact?.id ? t('editContact') : t('addContact')}</DialogTitle><DialogDescription>{t('contactHint', { client: detail.name })}</DialogDescription></DialogHeader>
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (contact?.name.trim()) void saveContact() }}>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-foreground" htmlFor="fb-contact-name">{t('contactName')}</label>
+              <Input id="fb-contact-name" autoFocus value={contact?.name ?? ''} maxLength={200} onChange={(e) => setContact((c) => c && { ...c, name: e.target.value })} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-foreground" htmlFor="fb-contact-email">{t('contactEmail')}</label>
+              <Input id="fb-contact-email" type="email" value={contact?.email ?? ''} maxLength={255} onChange={(e) => setContact((c) => c && { ...c, email: e.target.value })} />
+            </div>
+            <DialogFooter className="pt-1"><Button type="button" variant="outline" onClick={() => setContact(null)}>{ts('cancel')}</Button><Button type="submit" disabled={!contact?.name.trim() || busy}>{ts('save')}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

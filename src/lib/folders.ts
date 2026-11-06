@@ -31,8 +31,64 @@ function validName(name: string) {
   return n
 }
 
-export async function createFolder(name: string) {
-  return prisma.folder.create({ data: { name: validName(name) }, select: { id: true, name: true } })
+/** Levels below the root, counting the top-level folder as 1 (e.g. Kunde › 2026 › Kampagne). */
+export const MAX_FOLDER_DEPTH = 4
+
+/**
+ * Every change to the tree shape (create in a parent, move, delete) runs under this one
+ * transaction-scoped lock, so the cycle and depth checks below see a stable tree.
+ */
+async function lockTree(tx: Tx) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('frameback:folder-tree'))`
+}
+
+async function treeOf(tx: Tx) {
+  const rows = await tx.folder.findMany({ select: { id: true, parentId: true } })
+  const parent = new Map(rows.map((r) => [r.id, r.parentId]))
+  const children = new Map<string, string[]>()
+  for (const r of rows) if (r.parentId) children.set(r.parentId, [...(children.get(r.parentId) ?? []), r.id])
+  const depth = (id: string) => { let d = 0; for (let c: string | null | undefined = id; c && d <= rows.length; c = parent.get(c)) d++; return d }
+  const height = (id: string): number => 1 + Math.max(0, ...(children.get(id) ?? []).map(height))
+  const isInside = (id: string, ancestor: string) => { for (let c: string | null | undefined = id; c; c = parent.get(c)) if (c === ancestor) return true; return false }
+  return { depth, height, isInside }
+}
+
+export async function createFolder(name: string, parentId: string | null = null) {
+  const n = validName(name)
+  if (!parentId) return prisma.folder.create({ data: { name: n }, select: { id: true, name: true, parentId: true } })
+  return prisma.$transaction(async (tx) => {
+    await lockTree(tx)
+    await lockFolderShared(tx, parentId)
+    if ((await treeOf(tx)).depth(parentId) + 1 > MAX_FOLDER_DEPTH) throw new FolderError('INVALID', `Folders can be nested ${MAX_FOLDER_DEPTH} levels deep`)
+    return tx.folder.create({ data: { name: n, parentId }, select: { id: true, name: true, parentId: true } })
+  })
+}
+
+/** Put a folder (with everything inside) into another folder, or to the top level (null). */
+export const moveFolder = (id: string, parentId: string | null) => updateFolder(id, { parentId })
+
+/** Rename and/or move in one transaction: either both apply or neither. */
+export async function updateFolder(id: string, change: { name?: string; parentId?: string | null }) {
+  const name = change.name !== undefined ? validName(change.name) : undefined
+  return prisma.$transaction(async (tx) => {
+    if (change.parentId !== undefined) {
+      const parentId = change.parentId
+      await lockTree(tx)
+      if (!(await lockFolderExclusive(tx, id))) throw new FolderError('NOT_FOUND', 'Folder not found')
+      if (parentId) {
+        await lockFolderShared(tx, parentId)
+        const tree = await treeOf(tx)
+        if (tree.isInside(parentId, id)) throw new FolderError('INVALID', 'A folder cannot go into itself')
+        if (tree.depth(parentId) + tree.height(id) > MAX_FOLDER_DEPTH) throw new FolderError('INVALID', `Folders can be nested ${MAX_FOLDER_DEPTH} levels deep`)
+      }
+    }
+    const res = await tx.folder.updateMany({
+      where: { id },
+      data: { ...(name !== undefined ? { name } : {}), ...(change.parentId !== undefined ? { parentId: change.parentId } : {}) },
+    })
+    if (res.count === 0) throw new FolderError('NOT_FOUND', 'Folder not found')
+    return tx.folder.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, parentId: true } })
+  })
 }
 
 export async function renameFolder(id: string, name: string) {
@@ -42,15 +98,19 @@ export async function renameFolder(id: string, name: string) {
   return { id, name: n }
 }
 
-/** Projects in the folder fall back to "no folder" (FK ON DELETE SET NULL). */
+/** Projects and subfolders inside move up one level (to the parent, or to "no folder"). */
 export async function deleteFolder(id: string) {
   return prisma.$transaction(async (tx) => {
+    await lockTree(tx)
     if (!(await lockFolderExclusive(tx, id))) throw new FolderError('NOT_FOUND', 'Folder not found')
+    const { parentId } = await tx.folder.findUniqueOrThrow({ where: { id }, select: { parentId: true } })
+    if (parentId) await lockFolderShared(tx, parentId)
     const now = new Date()
-    await tx.project.updateMany({ where: { folderId: id }, data: { folderId: null, folderChangedAt: now, folderBatchId: null } })
+    await tx.project.updateMany({ where: { folderId: id }, data: { folderId: parentId, folderChangedAt: now, folderBatchId: null } })
+    await tx.folder.updateMany({ where: { parentId: id }, data: { parentId } })
     const res = await tx.folder.deleteMany({ where: { id } })
     if (res.count === 0) throw new FolderError('NOT_FOUND', 'Folder not found')
-    return { id }
+    return { id, parentId }
   })
 }
 
@@ -222,5 +282,32 @@ export async function restoreProjects(items: Array<{ id: string; status?: string
       restored += res.count
     }
     return { restored }
+  })
+}
+
+/**
+ * "Abschließen" / "Wieder öffnen": done projects leave the active lists, but unlike the
+ * archive their share link stays live. Rows are locked, so two parallel calls never both
+ * report the same project. Returns what changed plus a stamp (updatedAt afterwards); an
+ * undo passes the stamps and only reverts projects nobody has touched since.
+ */
+export async function setProjectsCompleted(items: Array<{ id: string; stamp?: string }>, completed: boolean) {
+  const ids = [...new Set(items.map((i) => i.id))]
+  if (ids.length === 0) throw new FolderError('INVALID', 'No projects given')
+  const stampOf = new Map(items.filter((i) => i.stamp).map((i) => [i.id, i.stamp!]))
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ id: string; completedAt: Date | null; updatedAt: Date }>>`
+      SELECT id, "completedAt", "updatedAt" FROM "Project" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`
+    const changed: string[] = []
+    const stamps: Record<string, string> = {}
+    for (const r of rows) {
+      if ((r.completedAt !== null) === completed) continue
+      const stamp = stampOf.get(r.id)
+      if (stamp && r.updatedAt.toISOString() !== stamp) continue // changed since: leave it
+      const u = await tx.project.update({ where: { id: r.id }, data: { completedAt: completed ? new Date() : null }, select: { updatedAt: true } })
+      changed.push(r.id)
+      stamps[r.id] = u.updatedAt.toISOString()
+    }
+    return { changed, stamps }
   })
 }

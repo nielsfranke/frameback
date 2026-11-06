@@ -6,7 +6,7 @@ import { apiDelete, apiPatch, apiPost } from '@/lib/api-client'
 import { useStudioData } from './StudioData'
 import { useToast } from './Toast'
 
-/** Folder and archive actions with toast + undo; every action reloads the shared data. */
+/** Folder, archive, done and approval actions with toast + undo; every action reloads the shared data. */
 export function useStudioActions() {
   const t = useTranslations('studio')
   const toast = useToast()
@@ -48,9 +48,36 @@ export function useStudioActions() {
     } catch { fail() }
   }, [reload, toast, t, fail])
 
-  const createFolder = useCallback(async (name: string) => {
+  /** "Abschließen" (completed) / "Wieder öffnen"; undo flips exactly the changed ones back */
+  const setCompleted = useCallback(async (projectIds: string[], completed: boolean) => {
     try {
-      const { folder } = await apiPost<{ folder: { id: string; name: string } }>('/api/folders', { name })
+      const { changed, stamps } = await apiPost<{ changed: string[]; stamps: Record<string, string> }>(
+        '/api/projects/complete', { items: projectIds.map((id) => ({ id })), completed })
+      await reload()
+      toast(t(completed ? 'completedN' : 'reopenedN', { n: changed.length }), changed.length ? async () => {
+        try {
+          const u = await apiPost<{ changed: string[] }>('/api/projects/complete', { items: changed.map((id) => ({ id, stamp: stamps[id] })), completed: !completed })
+          await reload()
+          toast(u.changed.length < changed.length ? t('undoPartial', { n: u.changed.length, skipped: changed.length - u.changed.length }) : t('undone'))
+        } catch { fail() }
+      } : undefined)
+      return true
+    } catch { fail(); return false }
+  }, [reload, toast, t, fail])
+
+  /** Studio approves the current version of every video (client agreed outside the app) */
+  const approveProject = useCallback(async (projectId: string) => {
+    try {
+      const r = await apiPost<{ approved: number }>(`/api/studio/projects/${projectId}/approve`, {})
+      await reload()
+      toast(r.approved ? t('projectApproved', { n: r.approved }) : t('projectAlreadyApproved'))
+      return true
+    } catch { fail(); return false }
+  }, [reload, toast, t, fail])
+
+  const createFolder = useCallback(async (name: string, parentId: string | null = null) => {
+    try {
+      const { folder } = await apiPost<{ folder: { id: string; name: string } }>('/api/folders', { name, parentId })
       await reload()
       return folder
     } catch { fail(); return null }
@@ -60,9 +87,19 @@ export function useStudioActions() {
     try { await apiPatch(`/api/folders/${id}`, { name }); await reload(); return true } catch { fail(); return false }
   }, [reload, fail])
 
+  const moveFolder = useCallback(async (id: string, parentId: string | null) => {
+    try {
+      await apiPatch(`/api/folders/${id}`, { parentId })
+      await reload()
+      const target = parentId ? folders.find((f) => f.id === parentId)?.name : t('topLevel')
+      toast(t('folderMovedTo', { folder: target ?? '' }))
+      return true
+    } catch { fail(); return false }
+  }, [reload, folders, toast, t, fail])
+
   const deleteFolder = useCallback(async (id: string) => {
     try { await apiDelete(`/api/folders/${id}`); await reload(); toast(t('folderDeleted')); return true } catch { fail(); return false }
   }, [reload, toast, t, fail])
 
-  return { move, archive, restore, createFolder, renameFolder, deleteFolder }
+  return { move, archive, restore, setCompleted, approveProject, createFolder, renameFolder, moveFolder, deleteFolder }
 }

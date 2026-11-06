@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     const [projects, folders] = await Promise.all([
       projectSummaries(admin.id),
-      prisma.folder.findMany({ select: { id: true, name: true, sortOrder: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
+      prisma.folder.findMany({ select: { id: true, name: true, parentId: true, sortOrder: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
     ])
     const sessionId = `studio:${admin.id}`
     const withThumbs = await Promise.all(projects.map(async (p) => {

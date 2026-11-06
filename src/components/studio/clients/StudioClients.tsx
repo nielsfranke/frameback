@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useFormatter, useNow, useTranslations } from 'next-intl'
-import { Building2, GitMerge, Loader2, Plus, Search } from 'lucide-react'
+import { Building2, GitMerge, Loader2, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { apiFetch, apiPost } from '@/lib/api-client'
+import { apiDelete, apiFetch, apiPatch, apiPost } from '@/lib/api-client'
+import { Menu } from '../Menu'
 import { useToast } from '../Toast'
 import { useStudioData } from '../StudioData'
 import type { BackfillPlan } from '@/lib/clients'
@@ -35,6 +36,7 @@ export default function StudioClients() {
   const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -90,6 +92,16 @@ export default function StudioClients() {
       const id = r.company?.id ?? r.id
       if (id) router.push(`/admin/clients/${id}`); else await load()
     } catch { toast(ts('actionFailed')) }
+  }
+
+  const saveEdit = async () => {
+    if (!editing?.name.trim()) return
+    try { await apiPatch(`/api/clients/${editing.id}`, { name: editing.name.trim() }); setEditing(null); await load(); void reloadOverview() }
+    catch (e) { toast(e instanceof Error && e.message && !/^HTTP \d/.test(e.message) ? e.message : ts('actionFailed')) }
+  }
+  const remove = async (c: ClientRow) => {
+    if (!window.confirm(t('deleteConfirmShort', { name: c.name }))) return
+    try { await apiDelete(`/api/clients/${c.id}`); toast(t('deleted', { name: c.name })); await load(); void reloadOverview() } catch { toast(ts('actionFailed')) }
   }
 
   // plan grouped by client for the preview
@@ -151,6 +163,7 @@ export default function StudioClients() {
                 <th className="hidden px-4 py-2.5 font-semibold md:table-cell">{t('colFeedback')}</th>
                 <th className="hidden px-4 py-2.5 font-semibold md:table-cell">{t('colContacts')}</th>
                 <th className="hidden px-4 py-2.5 font-semibold sm:table-cell">{t('colLast')}</th>
+                <th className="w-12 px-2 py-2.5"><span className="sr-only">{t('clientActions')}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -166,6 +179,12 @@ export default function StudioClients() {
                   <td className="hidden px-4 py-3 md:table-cell">{c.unreadProjects ? <span className="rounded-full bg-primary px-2 text-[11px] font-bold leading-[18px] text-primary-foreground">{t('projectsN', { n: c.unreadProjects })}</span> : <span className="text-muted-foreground">–</span>}</td>
                   <td className="hidden px-4 py-3 tabular-nums md:table-cell">{c.contacts || <span className="text-muted-foreground">–</span>}</td>
                   <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">{c.lastActivityAt ? format.relativeTime(new Date(c.lastActivityAt), now) : '–'}</td>
+                  <td className="px-2 py-3 text-right">
+                    <Menu label={t('clientActionsFor', { name: c.name })} trigger={<MoreHorizontal className="h-4 w-4" />} items={[
+                      { label: t('edit'), icon: <Pencil className="h-4 w-4" />, onSelect: () => setEditing({ id: c.id, name: c.name }) },
+                      { label: t('delete'), icon: <Trash2 className="h-4 w-4" />, danger: true, separatorBefore: true, onSelect: () => void remove(c) },
+                    ]} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -192,6 +211,19 @@ export default function StudioClients() {
             <Button variant="outline" onClick={() => setPlan(null)}>{ts('cancel')}</Button>
             <Button onClick={applyPreview} disabled={busy || !plan?.items.length}>{t('backfillApply', { n: plan?.items.length ?? 0 })}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{t('editClient')}</DialogTitle><DialogDescription>{t('renameHint')}</DialogDescription></DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); void saveEdit() }}>
+            <Input autoFocus value={editing?.name ?? ''} maxLength={200} onChange={(e) => setEditing((c) => c && { ...c, name: e.target.value })} aria-label={t('clientName')} />
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setEditing(null)}>{ts('cancel')}</Button>
+              <Button type="submit" disabled={!editing?.name.trim()}>{ts('save')}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

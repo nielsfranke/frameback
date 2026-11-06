@@ -1,10 +1,12 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import {
-  archiveProjects, createFolder, deleteFolder, FolderError, moveProjects, moveProjectsGrouped, renameFolder, restoreProjects, undoMoveBatch,
+  archiveProjects, createFolder, deleteFolder, FolderError, MAX_FOLDER_DEPTH, moveFolder, moveProjects, moveProjectsGrouped, renameFolder, restoreProjects,
+  setProjectsCompleted, undoMoveBatch, updateFolder,
 } from '@/lib/folders'
+import { adminOverride, approveProjectAsStudio } from '@/lib/review'
 import { projectSummaries, unreadByProject } from '@/lib/studio'
-import { addVersion, makeProject } from './helpers'
+import { addVersion, makeProject, state } from './helpers'
 
 afterAll(() => prisma.$disconnect())
 
@@ -19,9 +21,49 @@ describe('folders', () => {
     expect((await renameFolder(f.id, 'Messen 2027')).name).toBe('Messen 2027')
   })
 
-  it('a folder cannot be nested yet (database constraint)', async () => {
+  it('nests folders up to the depth limit', async () => {
+    let parent = (await createFolder('Kunde')).id
+    for (let d = 2; d <= MAX_FOLDER_DEPTH; d++) parent = (await createFolder(`Ebene ${d}`, parent)).id
+    await expect(createFolder('zu tief', parent)).rejects.toBeInstanceOf(FolderError)
+    await expect(createFolder('x', 'does-not-exist')).rejects.toBeInstanceOf(FolderError)
+  })
+
+  it('moving a folder: never into itself or below itself, never too deep, back to the top level', async () => {
     const a = await createFolder('A')
-    await expect(prisma.folder.create({ data: { name: 'B', parentId: a.id } })).rejects.toThrow()
+    const b = await createFolder('B', a.id)
+    const c = await createFolder('C', b.id)
+    await expect(moveFolder(a.id, a.id)).rejects.toBeInstanceOf(FolderError)
+    await expect(moveFolder(a.id, c.id)).rejects.toBeInstanceOf(FolderError)
+    // A has 3 levels; under a folder that already sits 2 deep it would reach 5
+    const x = await createFolder('X')
+    const y = await createFolder('Y', x.id)
+    await expect(moveFolder(a.id, y.id)).rejects.toBeInstanceOf(FolderError)
+    await moveFolder(a.id, x.id)
+    expect((await prisma.folder.findUniqueOrThrow({ where: { id: a.id } })).parentId).toBe(x.id)
+    await moveFolder(b.id, null)
+    expect((await prisma.folder.findUniqueOrThrow({ where: { id: b.id } })).parentId).toBeNull()
+    // the database refuses a folder as its own parent even past the library
+    await expect(prisma.folder.update({ where: { id: c.id }, data: { parentId: c.id } })).rejects.toThrow()
+  })
+
+  it('concurrent opposite moves cannot build a cycle', async () => {
+    const a = await createFolder('P')
+    const b = await createFolder('Q')
+    const results = await Promise.allSettled([moveFolder(a.id, b.id), moveFolder(b.id, a.id)])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const [fa, fb] = await Promise.all([a, b].map((f) => prisma.folder.findUniqueOrThrow({ where: { id: f.id } })))
+    expect(fa.parentId === b.id && fb.parentId === a.id).toBe(false)
+  })
+
+  it('deleting a nested folder moves its projects and subfolders up one level', async () => {
+    const { project } = await makeProject()
+    const top = await createFolder('Oben')
+    const mid = await createFolder('Mitte', top.id)
+    const low = await createFolder('Unten', mid.id)
+    await moveProjects({ projectIds: [project.id], folderId: mid.id })
+    expect(await deleteFolder(mid.id)).toEqual({ id: mid.id, parentId: top.id })
+    expect(await folderOf(project.id)).toBe(top.id)
+    expect((await prisma.folder.findUniqueOrThrow({ where: { id: low.id } })).parentId).toBe(top.id)
   })
 
   it('deleting a folder leaves its projects without a folder', async () => {
@@ -168,5 +210,74 @@ describe('overview summary', () => {
     const row = (await projectSummaries(user.id)).find((p) => p.id === project.id)!
     expect(row).toMatchObject({ videos: 3, approved: 1, waiting: 1, changes: 0 })
     expect(row.last?.type).toBe('upload')
+  })
+})
+
+describe('done (Abgeschlossen)', () => {
+  it('marks done and reopens; only changed ids are reported; status and share link stay', async () => {
+    const { user, project: a } = await makeProject()
+    const { project: b } = await makeProject()
+    expect((await setProjectsCompleted([{ id: a.id }], true)).changed).toEqual([a.id])
+    expect((await setProjectsCompleted([{ id: a.id }, { id: b.id }], true)).changed).toEqual([b.id])
+    const row = await prisma.project.findUniqueOrThrow({ where: { id: a.id }, select: { status: true, completedAt: true } })
+    expect(row.status).toBe('IN_REVIEW')
+    expect(row.completedAt).not.toBeNull()
+    expect((await projectSummaries(user.id)).find((p) => p.id === a.id)?.completed).toBe(true)
+    expect((await setProjectsCompleted([{ id: a.id }], false)).changed).toEqual([a.id])
+    expect((await projectSummaries(user.id)).find((p) => p.id === a.id)?.completed).toBe(false)
+  })
+
+  it('undo only reverts projects nobody changed since; parallel calls report a project once', async () => {
+    const { project } = await makeProject()
+    const first = await setProjectsCompleted([{ id: project.id }], true)
+    await new Promise((r) => setTimeout(r, 5))
+    // someone else reopens and marks it done again
+    await setProjectsCompleted([{ id: project.id }], false)
+    await setProjectsCompleted([{ id: project.id }], true)
+    const undo = await setProjectsCompleted([{ id: project.id, stamp: first.stamps[project.id] }], false)
+    expect(undo.changed).toEqual([])
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).completedAt).not.toBeNull()
+
+    await setProjectsCompleted([{ id: project.id }], false)
+    const both = await Promise.all([setProjectsCompleted([{ id: project.id }], true), setProjectsCompleted([{ id: project.id }], true)])
+    expect(both.flatMap((r) => r.changed)).toEqual([project.id])
+  })
+
+  it('rename + move in one request: an invalid name leaves the folder where it was', async () => {
+    const a = await createFolder('Quelle')
+    const b = await createFolder('Ziel')
+    await expect(updateFolder(a.id, { name: '   ', parentId: b.id })).rejects.toBeInstanceOf(FolderError)
+    expect((await prisma.folder.findUniqueOrThrow({ where: { id: a.id } })).parentId).toBeNull()
+    expect(await updateFolder(a.id, { name: 'Neu', parentId: b.id })).toEqual({ id: a.id, name: 'Neu', parentId: b.id })
+  })
+})
+
+describe('studio approves a whole project', () => {
+  it('approves the current version of every video, moves an older approval, skips processing-only videos', async () => {
+    const { user, project } = await makeProject()
+    const a1 = await addVersion(project.id, 'Spot', 1)
+    const a2 = await addVersion(project.id, 'Spot', 2)
+    const b1 = await addVersion(project.id, 'Teaser', 1)
+    await addVersion(project.id, 'Making-of', 1, 'PROCESSING')
+    // the client had approved v1 of Spot before v2 came in
+    await adminOverride({ videoId: a1.id, approved: true, adminUserId: user.id })
+
+    const r = await approveProjectAsStudio({ projectId: project.id, adminUserId: user.id, actorName: 'Studio' })
+    expect(new Set(r.approvedIds)).toEqual(new Set([a2.id, b1.id]))
+    expect(await state(a1.id)).toEqual({ reviewState: 'DRAFT', approved: false })
+    expect(await state(a2.id)).toEqual({ reviewState: 'APPROVED', approved: true })
+    expect(await state(b1.id)).toEqual({ reviewState: 'APPROVED', approved: true })
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).status).toBe('APPROVED')
+    expect(await prisma.reviewDecision.count({ where: { videoId: { in: [a2.id, b1.id] }, kind: 'ADMIN_OVERRIDE' } })).toBeGreaterThanOrEqual(2)
+    // again: nothing left to do
+    expect((await approveProjectAsStudio({ projectId: project.id, adminUserId: user.id })).approvedIds).toEqual([])
+  })
+
+  it('an archived project stays archived', async () => {
+    const { user, project } = await makeProject()
+    await addVersion(project.id, 'Spot', 1)
+    await prisma.project.update({ where: { id: project.id }, data: { status: 'ARCHIVED' } })
+    await approveProjectAsStudio({ projectId: project.id, adminUserId: user.id })
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).status).toBe('ARCHIVED')
   })
 })

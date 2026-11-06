@@ -131,6 +131,8 @@ model Project {
   /// move batch that last placed the project; undo only reverts while this still matches
   folderBatchId   String?
   folderMoves     FolderMoveItem[]
+  /// Frameback: studio marked the project done – out of the active lists, share link stays live
+  completedAt     DateTime?
 
   videos            Video[]
   comments          Comment[]

@@ -40,6 +40,7 @@ export type ReviewErrorCode =
   | 'IDEMPOTENCY_MISMATCH'
   | 'CONCURRENT_UPDATE'
   | 'RULE_NOT_SUPPORTED'
+  | 'PROJECT_NOT_FOUND'
 
 export class ReviewError extends Error {
   constructor(public code: ReviewErrorCode, message: string) {
@@ -451,6 +452,41 @@ export async function unapproveProject(
       data: { status: 'IN_REVIEW', approvedAt: null, approvedVideoId: null },
     })
     return count
+  })
+}
+
+/**
+ * Studio "Projekt freigeben": the current version of every video counts as approved
+ * (e.g. the client agreed by mail or phone). All groups locked together, each change is
+ * recorded as ADMIN_OVERRIDE; never notifies. Archived/share-only status stays as it is.
+ * Returns the video ids whose approval changed (for clean-preview jobs).
+ */
+export async function approveProjectAsStudio(
+  params: { projectId: string; adminUserId?: string | null; actorName?: string },
+  db: Db = defaultPrisma
+) {
+  return runTx(db, async (tx) => {
+    await lockProject(tx, params.projectId, 'UPDATE')
+    const project = await tx.project.findUnique({ where: { id: params.projectId }, select: { status: true } })
+    if (!project) throw new ReviewError('PROJECT_NOT_FOUND', 'Project not found')
+    const groups = await tx.videoGroup.findMany({ where: { projectId: params.projectId }, select: { id: true } })
+    await lockGroups(tx, groups.map((g) => g.id))
+    const approvedIds: string[] = []
+    let current: string | null = null
+    for (const g of groups) {
+      const cur = await currentIn(tx, g.id)
+      if (!cur) continue // nothing playable yet (still processing): nothing to approve
+      const fresh = await tx.video.findUniqueOrThrow({ where: { id: cur.id }, select: videoSelect })
+      if (await overrideInTx(tx, { ...fresh, groupId: g.id }, true, params)) approvedIds.push(cur.id)
+      current ??= cur.id
+    }
+    if (current && project.status === 'IN_REVIEW') {
+      await tx.project.update({
+        where: { id: params.projectId },
+        data: { status: 'APPROVED', approvedAt: new Date(), approvedVideoId: approvedIds[0] ?? current },
+      })
+    }
+    return { approvedIds }
   })
 }
 

@@ -4,17 +4,19 @@ import { Suspense, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useFormatter, useNow, useTranslations } from 'next-intl'
-import { Archive, ArchiveRestore, Eye, Folder, FolderInput, Link2, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Trash2, Video, X } from 'lucide-react'
+import { Archive, ArchiveRestore, CheckCheck, CircleCheck, Eye, Folder, FolderInput, FolderPlus, Link2, MoreHorizontal, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2, Video, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useStudioData } from './StudioData'
 import { useStudioActions } from './useStudioActions'
 import { useToast } from './Toast'
 import { Menu } from './Menu'
-import { FolderNameDialog, MoveDialog } from './FolderDialogs'
+import { FolderMoveDialog, FolderNameDialog, MoveDialog } from './FolderDialogs'
+import { ApproveProjectDialog } from './ApproveProjectDialog'
+import FolderBrowser, { FolderBreadcrumb } from './FolderBrowser'
 import { rememberView } from './StudioNav'
 import SortByClient from './SortByClient'
-import { clientName, DRAG_TYPE, inView, matchesQuery, viewFromParams, type StudioProject, type View } from './views'
+import { canNestIn, clientName, DRAG_TYPE, inView, matchesQuery, viewFromParams, viewHref, type StudioFolder, type StudioProject, type View } from './views'
 
 type Sort = 'activity' | 'name' | 'due'
 
@@ -75,7 +77,8 @@ export function Row({ p, view, selected = false, selection = [], onToggle, onMov
   const now = useNow({ updateInterval: 60_000 })
   const router = useRouter()
   const toast = useToast()
-  const { archive, restore } = useStudioActions()
+  const { archive, restore, setCompleted } = useStudioActions()
+  const [approving, setApproving] = useState(false)
   const href = `/admin/projects/${p.id}`
   const client = clientName(p)
   const open = () => { rememberView(view); router.push(href) }
@@ -107,6 +110,7 @@ export function Row({ p, view, selected = false, selection = [], onToggle, onMov
           {p.folder && view.kind !== 'folder' && p.folder.name !== client && <span className="inline-flex items-center gap-1"><Folder className="h-3 w-3" />{p.folder.name}</span>}
           {p.dueDate && <span>{t('due', { date: format.dateTime(new Date(p.dueDate), { day: 'numeric', month: 'short' }) })}</span>}
           {p.archived && <span className="rounded bg-muted px-1.5 text-[11px] font-semibold">{t('archivedBadge')}</span>}
+          {p.completed && !p.archived && <span className="inline-flex items-center gap-1 rounded bg-success/15 px-1.5 text-[11px] font-semibold text-success"><CircleCheck className="h-3 w-3" />{t('doneBadge')}</span>}
         </div>
         <div className="mt-1.5 md:hidden"><Progress p={p} /></div>
       </div>
@@ -121,11 +125,21 @@ export function Row({ p, view, selected = false, selection = [], onToggle, onMov
           { label: t('copyLink'), icon: <Link2 className="h-4 w-4" />, onSelect: async () => {
             try { await navigator.clipboard.writeText(`${window.location.origin}/share/${p.slug}`); toast(t('linkCopied')) } catch { toast(t('actionFailed')) }
           } },
+          ...(p.videos > p.approved && !p.archived
+            ? [{ label: t('approveProject'), icon: <CheckCheck className="h-4 w-4" />, onSelect: () => setApproving(true), separatorBefore: true }]
+            : []),
+          ...(p.archived ? [] : [p.completed
+            ? { label: t('reopen'), icon: <RotateCcw className="h-4 w-4" />, onSelect: () => setCompleted([p.id], false), separatorBefore: p.videos <= p.approved }
+            : { label: t('complete'), icon: <CircleCheck className="h-4 w-4" />, onSelect: () => setCompleted([p.id], true), separatorBefore: p.videos <= p.approved }]),
           p.archived
             ? { label: t('restore'), icon: <ArchiveRestore className="h-4 w-4" />, onSelect: () => restore([p.id]), separatorBefore: true }
-            : { label: t('archiveAction'), icon: <Archive className="h-4 w-4" />, onSelect: () => archive([p.id]), separatorBefore: true },
+            : { label: t('archiveAction'), icon: <Archive className="h-4 w-4" />, onSelect: () => archive([p.id]) },
         ]}
       />
+      {/* React events bubble through portals: keep dialog clicks from opening the row */}
+      <div className="contents" onClick={(e) => e.stopPropagation()}>
+        <ApproveProjectDialog project={approving ? p : null} onOpenChange={setApproving} />
+      </div>
     </div>
   )
 }
@@ -136,12 +150,14 @@ function Inner() {
   const router = useRouter()
   const view = viewFromParams(sp)
   const { projects, folders, loading, error, reload } = useStudioData()
-  const { archive, restore, renameFolder, deleteFolder } = useStudioActions()
+  const { archive, restore, setCompleted, createFolder, renameFolder, deleteFolder } = useStudioActions()
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<Sort>('activity')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [moving, setMoving] = useState<string[] | null>(null)
   const [renaming, setRenaming] = useState(false)
+  const [movingFolder, setMovingFolder] = useState<StudioFolder | null>(null)
+  const [creatingFolder, setCreatingFolder] = useState(false)
   const viewKey = JSON.stringify(view)
   // coming back from a project page (created, renamed, deleted …): fetch fresh rows
   useEffect(() => { void reload() }, [reload])
@@ -167,6 +183,12 @@ function Inner() {
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const allSelected = list.length > 0 && selection.length === list.length
   const archiveView = view.kind === 'archive'
+  const doneView = view.kind === 'done'
+  // folder views are a file browser: subfolders first, then the projects filed here
+  const browsing = !q.trim() && (view.kind === 'folder' || view.kind === 'nofolder')
+  const browseParent = view.kind === 'folder' ? view.id : null
+  const hasSubfolders = browsing && folders.some((f) => (f.parentId ?? null) === browseParent)
+  const canAddSubfolder = view.kind !== 'folder' || canNestIn(folders, null, view.id)
 
   if (view.kind === 'folder' && !loading && !folder) {
     return <div className="p-8 text-sm text-muted-foreground">{t('folderMissing')} <Link className="text-primary underline" href="/admin/projects">{t('viewTitle.all')}</Link></div>
@@ -174,6 +196,7 @@ function Inner() {
 
   return (
     <div className="mx-auto w-full max-w-[1240px] px-4 pb-24 pt-5 sm:px-7">
+      {view.kind === 'folder' && <FolderBreadcrumb folderId={view.id} />}
       <div className="mb-4 flex items-center gap-3">
         <h1 className="truncate text-2xl font-bold tracking-tight">{title}</h1>
         <span className="text-muted-foreground tabular-nums">{list.length}</span>
@@ -184,14 +207,20 @@ function Inner() {
             trigger={<MoreHorizontal className="h-4 w-4" />}
             items={[
               { label: t('renameFolder'), icon: <Pencil className="h-4 w-4" />, onSelect: () => setRenaming(true) },
+              { label: t('moveTo'), icon: <FolderInput className="h-4 w-4" />, onSelect: () => setMovingFolder(folder) },
               { label: t('deleteFolder'), icon: <Trash2 className="h-4 w-4" />, danger: true, separatorBefore: true, onSelect: async () => {
                 if (!window.confirm(t('deleteFolderConfirm', { name: folder.name }))) return
-                if (await deleteFolder(folder.id)) router.push('/admin/projects?folder=none')
+                if (await deleteFolder(folder.id)) router.push(viewHref(folder.parentId ? { kind: 'folder', id: folder.parentId } : { kind: 'nofolder' }))
               } },
             ]}
           />
         )}
-        <Button asChild className="ml-auto"><Link href={view.kind === 'folder' ? `/admin/projects/new?folder=${view.id}` : '/admin/projects/new'}><Plus className="mr-1.5 h-4 w-4" />{t('newProject')}</Link></Button>
+        {browsing && canAddSubfolder && (
+          <Button variant="outline" className="ml-auto" aria-label={view.kind === 'folder' ? t('newSubfolder') : t('newFolder')} onClick={() => setCreatingFolder(true)}>
+            <FolderPlus className="mr-1.5 h-4 w-4" /><span className="hidden sm:inline">{view.kind === 'folder' ? t('newSubfolder') : t('newFolder')}</span>
+          </Button>
+        )}
+        <Button asChild className={browsing && canAddSubfolder ? '' : 'ml-auto'}><Link href={view.kind === 'folder' ? `/admin/projects/new?folder=${view.id}` : '/admin/projects/new'}><Plus className="mr-1.5 h-4 w-4" />{t('newProject')}</Link></Button>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -207,6 +236,8 @@ function Inner() {
       </div>
       {q.trim() && <p className="mb-2 text-xs font-semibold text-muted-foreground">{t('searchScope')}</p>}
       {!q.trim() && (view.kind === 'all' || view.kind === 'nofolder') && !loading && <SortByClient />}
+      {browsing && !loading && <FolderBrowser parentId={browseParent} />}
+      {browsing && hasSubfolders && list.length > 0 && <h2 className="mb-2 text-xs font-semibold text-muted-foreground">{view.kind === 'nofolder' ? t('noFolder') : t('projectsHere')}</h2>}
 
       {error ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm">
@@ -217,9 +248,11 @@ function Inner() {
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="flex items-center gap-3 border-t border-border px-3 py-3 first:border-t-0"><div className="h-4 w-4 rounded bg-muted" /><div className="aspect-video w-[88px] rounded-md bg-muted" /><div className="h-4 w-1/3 rounded bg-muted" /></div>)}
         </div>
       ) : list.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
-          {q.trim() ? t('emptySearch') : t(`empty.${view.kind}`)}
-        </div>
+        browsing && hasSubfolders ? null : (
+          <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
+            {q.trim() ? t('emptySearch') : t(`empty.${view.kind}`)}
+          </div>
+        )
       ) : (
         <div role="table" aria-label={title} className="overflow-hidden rounded-xl border border-border bg-card shadow-elevation-sm">
           <div role="row" className="flex items-center gap-3 border-b border-border px-3 py-2 text-xs text-muted-foreground">
@@ -236,6 +269,9 @@ function Inner() {
         <div role="region" aria-label={t('selection')} className="sticky bottom-4 z-30 mx-auto mt-3 flex w-max max-w-full flex-wrap items-center gap-2 rounded-xl bg-neutral-900 py-2 pl-4 pr-2 text-sm text-white shadow-elevation-lg animate-in fade-in slide-in-from-bottom-2">
           <span><b>{selection.length}</b> {t('selected')}</span>
           <Button size="sm" variant="secondary" onClick={() => setMoving(selection)}><FolderInput className="mr-1.5 h-4 w-4" />{t('moveTo')}</Button>
+          {!archiveView && (doneView
+            ? <Button size="sm" variant="secondary" onClick={async () => { if (await setCompleted(selection, false)) setSel(new Set()) }}><RotateCcw className="mr-1.5 h-4 w-4" />{t('reopen')}</Button>
+            : <Button size="sm" variant="secondary" onClick={async () => { if (await setCompleted(selection, true)) setSel(new Set()) }}><CircleCheck className="mr-1.5 h-4 w-4" />{t('complete')}</Button>)}
           {archiveView
             ? <Button size="sm" variant="secondary" onClick={async () => { await restore(selection); setSel(new Set()) }}><ArchiveRestore className="mr-1.5 h-4 w-4" />{t('restore')}</Button>
             : <Button size="sm" variant="secondary" onClick={async () => { await archive(selection); setSel(new Set()) }}><Archive className="mr-1.5 h-4 w-4" />{t('archiveAction')}</Button>}
@@ -249,6 +285,8 @@ function Inner() {
         onOpenChange={(o) => { if (!o) setMoving(null) }}
         onDone={() => setSel(new Set())}
       />
+      <FolderMoveDialog folder={movingFolder} onOpenChange={(o) => { if (!o) setMovingFolder(null) }} />
+      <FolderNameDialog open={creatingFolder} onOpenChange={setCreatingFolder} title={view.kind === 'folder' ? t('newSubfolderIn', { name: folder?.name ?? '' }) : t('newFolder')} onSubmit={(name) => createFolder(name, browseParent)} />
       {folder && <FolderNameDialog open={renaming} onOpenChange={setRenaming} initial={folder.name} title={t('renameFolder')} onSubmit={(name) => renameFolder(folder.id, name)} />}
     </div>
   )

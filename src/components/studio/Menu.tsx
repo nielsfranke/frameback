@@ -20,13 +20,16 @@ export function Menu({ label, trigger, items, align = 'right', className = '' }:
   className?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<React.CSSProperties>({})
+  // fixed + hidden until placed: an unplaced list sits at the end of <body>, and focusing it
+  // there scrolls the page down
+  const [pos, setPos] = useState<React.CSSProperties>({ position: 'fixed', top: 0, left: 0, visibility: 'hidden' })
   const root = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const btn = useRef<HTMLButtonElement>(null)
   // rendered in a portal with fixed position, so scroll/overflow containers never clip it
   useLayoutEffect(() => {
-    if (!open || !btn.current) return
+    if (!open) { setPos({ position: 'fixed', top: 0, left: 0, visibility: 'hidden' }); return }
+    if (!btn.current) return
     const place = () => {
       const r = btn.current!.getBoundingClientRect()
       const h = list.current?.offsetHeight ?? 240
@@ -51,9 +54,13 @@ export function Menu({ label, trigger, items, align = 'right', className = '' }:
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus() } }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
-    list.current?.querySelector<HTMLButtonElement>('[role=menuitem]')?.focus()
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
+  // focus the first item once the list is placed (a hidden element cannot take focus)
+  const placed = open && pos.visibility !== 'hidden'
+  useEffect(() => {
+    if (placed) list.current?.querySelector<HTMLButtonElement>('[role=menuitem]')?.focus({ preventScroll: true })
+  }, [placed])
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
     e.preventDefault()

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useFormatter, useNow, useTranslations } from 'next-intl'
 import {
-  AlertTriangle, Archive, BarChart3, Check, ChevronDown, ChevronUp, Clock, Download, GripVertical, Images, Loader2,
+  AlertTriangle, Archive, BarChart3, Check, CheckCheck, ChevronDown, CircleCheck, RotateCcw, ChevronUp, Clock, Download, GripVertical, Images, Loader2,
   MessageSquare, MoreHorizontal, Pencil, Send, Settings, Trash2, Undo2, Upload, Video,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,8 @@ import { Menu } from '../Menu'
 import { useToast } from '../Toast'
 import { useStudioData } from '../StudioData'
 import { useStudioActions } from '../useStudioActions'
+import { ApproveProjectDialog } from '../ApproveProjectDialog'
+import { folderPath, viewHref } from '../views'
 import { buildGroups, openThreads, unreadIn, type AdminComment, type AdminVideo, type Group } from './groups'
 import { useSortable } from './useSortable'
 import { NewVersionDialog, RenameVideoDialog, SendForReviewDialog, SharePopover } from './Dialogs'
@@ -39,8 +41,9 @@ export default function StudioProjectPage({ id }: { id: string }) {
   const now = useNow({ updateInterval: 60_000 })
   const router = useRouter()
   const toast = useToast()
-  const { reload: reloadOverview } = useStudioData()
-  const { archive } = useStudioActions()
+  const { reload: reloadOverview, projects: overview, folders } = useStudioData()
+  const { archive, setCompleted } = useStudioActions()
+  const [approving, setApproving] = useState(false)
 
   const [project, setProject] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -178,6 +181,7 @@ export default function StudioProjectPage({ id }: { id: string }) {
     unread: unread.size,
   }
   const clientLabel = project.clientCompany?.name || project.companyName || null
+  const completed = !!overview.find((p) => p.id === id)?.completed
 
   const deleteGroup = async (g: Group) => {
     if (!window.confirm(t('deleteVideoConfirm', { name: g.name }))) return
@@ -214,13 +218,16 @@ export default function StudioProjectPage({ id }: { id: string }) {
     <div className="mx-auto w-full max-w-[1240px] px-4 pb-24 pt-5 sm:px-7">
       <nav className="text-[13px] text-muted-foreground" aria-label={t('breadcrumb')}>
         <Link href="/admin/projects" className="hover:text-foreground">{ts('viewTitle.all')}</Link>
-        {project.folder && <> <span aria-hidden>/</span> <Link href={`/admin/projects?folder=${project.folder.id}`} className="hover:text-foreground">{project.folder.name}</Link></>}
+        {project.folder && (folderPath(folders, project.folder.id).length ? folderPath(folders, project.folder.id) : [project.folder]).map((f) => (
+          <span key={f.id}> <span aria-hidden>/</span> <Link href={viewHref({ kind: 'folder', id: f.id })} className="hover:text-foreground">{f.name}</Link></span>
+        ))}
       </nav>
 
       <header className="mb-5 mt-2 flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold leading-tight tracking-tight [text-wrap:balance]">{project.title}</h1>
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
+            {completed && <span className="inline-flex items-center gap-1 font-semibold text-success"><CircleCheck className="h-3.5 w-3.5" />{ts('doneBadge')}</span>}
             {clientLabel && <b className="font-semibold text-foreground">{clientLabel}</b>}
             <span>{project.authMode === 'NONE' ? t('accessOpen') : t('accessProtected')}</span>
             <Link href={`/admin/projects/${id}/settings`} className="hover:text-foreground hover:underline" title={project.reviewFlow ? tr('projectSettingOn') : tr('projectSettingOff')}>{project.reviewFlow ? tr('accessOn') : tr('accessOff')}</Link>
@@ -245,7 +252,13 @@ export default function StudioProjectPage({ id }: { id: string }) {
             items={[
               { label: t('settings'), icon: <Settings className="h-4 w-4" />, onSelect: () => router.push(`/admin/projects/${id}/settings`) },
               { label: t('analytics'), icon: <BarChart3 className="h-4 w-4" />, onSelect: () => router.push(`/admin/projects/${id}/analytics`) },
-              { label: ts('archiveAction'), icon: <Archive className="h-4 w-4" />, separatorBefore: true, onSelect: async () => { await archive([id]); void fetchProject() } },
+              ...(summary.total > summary.approved && project.status !== 'ARCHIVED'
+                ? [{ label: ts('approveProject'), icon: <CheckCheck className="h-4 w-4" />, separatorBefore: true, onSelect: () => setApproving(true) }]
+                : []),
+              ...(project.status === 'ARCHIVED' ? [] : [completed
+                ? { label: ts('reopen'), icon: <RotateCcw className="h-4 w-4" />, separatorBefore: summary.total <= summary.approved, onSelect: () => void setCompleted([id], false) }
+                : { label: ts('complete'), icon: <CircleCheck className="h-4 w-4" />, separatorBefore: summary.total <= summary.approved, onSelect: () => void setCompleted([id], true) }]),
+              { label: ts('archiveAction'), icon: <Archive className="h-4 w-4" />, onSelect: async () => { await archive([id]); void fetchProject() } },
               { label: t('deleteProject'), icon: <Trash2 className="h-4 w-4" />, danger: true, onSelect: deleteProject },
             ]}
           />
@@ -405,6 +418,7 @@ export default function StudioProjectPage({ id }: { id: string }) {
       </div>
 
       <VideoUploadModal isOpen={uploadOpen} onClose={() => { setUploadOpen(false); setDropped([]) }} projectId={id} initialFiles={dropped} onUploadComplete={() => void refresh()} />
+      <ApproveProjectDialog project={approving ? { id, title: project.title, videos: summary.total, approved: summary.approved } : null} onOpenChange={setApproving} onDone={() => void refresh()} />
       <SendForReviewDialog group={sending} smtpConfigured={!!project.smtpConfigured} onOpenChange={(o) => { if (!o) setSending(null) }} onDone={() => void refresh()} />
       <NewVersionDialog projectId={id} group={newVersion?.group ?? null} file={newVersion?.file} onOpenChange={(o) => { if (!o) setNewVersion(null) }} onUploaded={() => void refresh()} />
       <RenameVideoDialog group={renaming} onOpenChange={(o) => { if (!o) setRenaming(null) }} onDone={() => void refresh()} />

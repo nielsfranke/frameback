@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { applySoftDelete } from '@/lib/comment-ownership'
 import { getPrimaryRecipient } from '@/lib/recipients'
 import { isSmtpConfigured } from '@/lib/settings'
 import { getRedis } from '@/lib/redis'
@@ -378,7 +379,7 @@ export async function fetchProjectComments(projectId: string) {
     },
   }
 
-  return prisma.comment.findMany({
+  const comments = await prisma.comment.findMany({
     where: {
       projectId,
       parentId: null, // Only get top-level comments
@@ -410,4 +411,6 @@ export async function fetchProjectComments(projectId: string) {
     },
     orderBy: { createdAt: 'asc' }
   })
+  // Frameback: deleted comments hidden, placeholders kept where studio replied
+  return applySoftDelete(comments)
 }

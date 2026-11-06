@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { applySoftDelete, setViewerCookie, viewerHashFrom, viewerKeyFor } from '@/lib/comment-ownership'
+import { hashViewerKey } from '@/lib/review'
+
+class InvalidAttachmentsError extends Error {}
 import { getAuthContext } from '@/lib/auth'
 import { rateLimit } from '@/lib/rate-limit'
 import { validateRequest, createCommentSchema, safeParseBody } from '@/lib/validation'
@@ -129,13 +133,15 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'asc' }
     })
 
-    // Sanitize the response data
-    const sanitizedComments = allComments.map((comment: any) =>
+    // Sanitize the response data (Frameback: soft delete + own-comment flag)
+    const viewerHash = viewerHashFrom(request)
+    const sanitizedComments = applySoftDelete(allComments as any[]).map((comment: any) =>
       sanitizeComment(
         comment,
         isAdmin,
         isAuthenticated,
         fallbackName,
+        viewerHash,
       )
     )
 
@@ -294,70 +300,64 @@ export async function POST(request: NextRequest) {
     // If version is omitted, infer from current video record
     const finalVideoVersion = videoVersion || video.version
 
-    // Create comment
-    const comment = await prisma.comment.create({
-      data: {
-        projectId,
-        videoId,
-        videoVersion: finalVideoVersion || null,
-        timecode,
-        timecodeEnd: timecodeEnd || null,
-        content: contentValidation.sanitizedContent!,
-        authorName: contentValidation.sanitizedAuthorName,
-        authorEmail: finalAuthorEmail,
-        isInternal: isInternal || false,
-        parentId: parentId || null,
-        userId: authContext.user?.id || null,
-        annotations: annotations || undefined,
+    // Frameback: own-comment key for clients (no account needed). Admin comments carry none.
+    const viewer = isAdmin ? null : viewerKeyFor(request)
+
+    // Create comment and claim attachments in ONE transaction: a failed attachment check
+    // no longer leaves an orphan comment behind. Assets are claimed exclusively
+    // (commentId IS NULL, upload completed, same uploader session).
+    const commentInclude = {
+      user: { select: { id: true, name: true, username: true, email: true } },
+      replies: {
+        include: { user: { select: { id: true, name: true, username: true, email: true } } },
+        orderBy: { createdAt: 'asc' as const },
       },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            email: true,
-          }
-        },
-        replies: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                email: true,
-              }
-            }
+    }
+    let comment
+    try {
+      comment = await prisma.$transaction(async (tx) => {
+        const created = await tx.comment.create({
+          data: {
+            projectId,
+            videoId,
+            videoVersion: finalVideoVersion || null,
+            timecode,
+            timecodeEnd: timecodeEnd || null,
+            content: contentValidation.sanitizedContent!,
+            authorName: contentValidation.sanitizedAuthorName,
+            authorEmail: finalAuthorEmail,
+            isInternal: isInternal || false,
+            parentId: parentId || null,
+            userId: authContext.user?.id || null,
+            annotations: annotations || undefined,
+            authorKeyHash: viewer ? hashViewerKey(viewer.key) : null,
           },
-          orderBy: { createdAt: 'asc' }
+          include: commentInclude,
+        })
+        if (assetIds && assetIds.length > 0) {
+          const claimed = await tx.videoAsset.updateMany({
+            where: {
+              id: { in: assetIds },
+              videoId,
+              uploadedBy: 'client',
+              uploadedBySessionId: uploaderSessionId,
+              commentId: null,
+              uploadCompletedAt: { not: null },
+            },
+            data: { commentId: created.id },
+          })
+          if (claimed.count !== assetIds.length) throw new InvalidAttachmentsError()
         }
-      }
-    })
-
-    // Link client assets to comment
-    if (assetIds && assetIds.length > 0) {
-      const assets = await prisma.videoAsset.findMany({
-        where: {
-          id: { in: assetIds },
-          videoId,
-          uploadedBy: 'client',
-          uploadedBySessionId: uploaderSessionId,
-          commentId: null,
-        },
+        return created
       })
-
-      if (assets.length !== assetIds.length) {
+    } catch (error) {
+      if (error instanceof InvalidAttachmentsError) {
         return NextResponse.json(
           { error: commentsMessages.invalidAttachments || 'One or more attachments are invalid or no longer available. Please attach the file again.' },
           { status: 400 }
         )
       }
-
-      await prisma.videoAsset.updateMany({
-        where: { id: { in: assets.map(a => a.id) } },
-        data: { commentId: comment.id },
-      })
+      throw error
     }
 
     // Collect attachment file names for notifications
@@ -380,11 +380,14 @@ export async function POST(request: NextRequest) {
 
     const allComments = await fetchProjectComments(projectId)
 
+    const viewerHash = viewer ? hashViewerKey(viewer.key) : viewerHashFrom(request)
     const sanitizedComments = allComments.map((comment: any) =>
-      sanitizeComment(comment, isAdmin, isAuthenticated, fallbackName)
+      sanitizeComment(comment, isAdmin, isAuthenticated, fallbackName, viewerHash)
     )
 
-    return NextResponse.json(sanitizedComments)
+    const response = NextResponse.json(sanitizedComments)
+    if (viewer?.isNew) setViewerCookie(response, viewer.key)
+    return response
   } catch (error) {
     return NextResponse.json({ error: commentsMessages.operationFailed || 'Operation failed' }, { status: 500 })
   }

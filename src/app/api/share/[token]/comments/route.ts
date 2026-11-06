@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { applySoftDelete, viewerHashFrom } from '@/lib/comment-ownership'
 import { getPrimaryRecipient } from '@/lib/recipients'
 import { rateLimit } from '@/lib/rate-limit'
 import { verifyProjectAccess } from '@/lib/project-access'
@@ -131,11 +132,13 @@ export async function GET(
     })
 
     // Sanitize comments - never expose PII to non-admins
-    const sanitizedComments = comments.map((comment: any) => sanitizeComment(
+    const viewerHash = viewerHashFrom(request)
+    const sanitizedComments = applySoftDelete(comments as any[]).map((comment: any) => sanitizeComment(
       comment,
       isAdmin,
       isAuthenticated,
       fallbackName,
+      viewerHash,
     ))
 
     return NextResponse.json(sanitizedComments)

@@ -33,7 +33,9 @@ export function sanitizeComment(
   comment: any,
   isAdmin: boolean,
   isAuthenticated: boolean,
-  clientName?: string
+  clientName?: string,
+  /** Frameback: sha256 of the requesting browser's vt_viewer key (null = none) */
+  viewerKeyHash?: string | null
 ) {
   const normalizedTimecode = normalizeTimecode(comment)
 
@@ -50,6 +52,13 @@ export function sanitizeComment(
     createdAt: comment.createdAt,
     updatedAt: comment.updatedAt,
     parentId: comment.parentId,
+    // Frameback: edit/delete state. authorKeyHash itself is never exposed.
+    editedAt: comment.editedAt || null,
+    deleted: comment.deleted === true || !!comment.deletedAt,
+    resolvedAt: comment.resolvedAt || null,
+    canEdit:
+      !comment.deletedAt && !comment.deleted &&
+      (isAdmin || (!comment.isInternal && !!viewerKeyHash && comment.authorKeyHash === viewerKeyHash)),
   }
 
   // NEVER expose real names or emails to non-admins
@@ -90,7 +99,7 @@ export function sanitizeComment(
 
   if (comment.replies && Array.isArray(comment.replies)) {
     sanitized.replies = comment.replies.map((reply: any) =>
-      sanitizeComment(reply, isAdmin, isAuthenticated, clientName)
+      sanitizeComment(reply, isAdmin, isAuthenticated, clientName, viewerKeyHash)
     )
   }
 

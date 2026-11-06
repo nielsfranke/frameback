@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { applySoftDelete } from '@/lib/comment-ownership'
 import { deleteFile, deleteDirectory } from '@/lib/storage'
 import { requireApiAdmin } from '@/lib/auth'
 import { getShareContents } from '@/lib/project-access'
@@ -95,7 +96,7 @@ export async function GET(
     const primaryRecipient = project.recipients?.find((r: any) => r.isPrimary) || project.recipients?.[0]
     const fallbackName = project.companyName || primaryRecipient?.name || 'Client'
 
-    const sanitizedComments = project.comments.map((comment: any) =>
+    const sanitizedComments = applySoftDelete(project.comments as any[]).map((comment: any) =>
       sanitizeComment(comment, true, true, fallbackName)
     )
 

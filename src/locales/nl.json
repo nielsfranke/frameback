@@ -2394,7 +2394,9 @@
     "notePlaceholder": "e.g. New end claim and remixed music",
     "cancel": "Cancel",
     "sendConfirm": "Send for approval",
-    "failed": "Action failed"
+    "failed": "Action failed",
+    "notifyClients": "Notify clients by email",
+    "notifyClientsHint": "One “new version” email to recipients with notifications on (template under Settings → Email templates)."
   },
   "fbShare": {
     "previewBadge": "Preview",

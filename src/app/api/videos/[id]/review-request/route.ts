@@ -3,7 +3,8 @@ import { rejectCrossOrigin } from '@/lib/same-origin'
 import { requireApiAdmin } from '@/lib/auth'
 import { rateLimit } from '@/lib/rate-limit'
 import { ReviewError, requestReview, withdrawReview } from '@/lib/review'
-import { logMessage } from '@/lib/logging'
+import { logError, logMessage } from '@/lib/logging'
+import { notifyClientsReviewRequested } from '@/lib/review-notifications'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params
   const body = await request.json().catch(() => ({}))
   const versionNote = typeof body?.versionNote === 'string' ? body.versionNote : undefined
+  const notifyClients = body?.notifyClients !== false // default: inform the client by email
   try {
     const round = await requestReview({
       videoId: id,
@@ -36,7 +38,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       versionNote,
     })
     logMessage(`[REVIEW] Version ${id} sent for approval by ${admin.email}`)
-    return NextResponse.json({ success: true, requestId: round.id })
+    // "Bitte prüfen" email to the project recipients (fire and forget; never blocks the action)
+    if (notifyClients) {
+      void notifyClientsReviewRequested(id).catch((e) => logError('[REVIEW] client notification failed:', e))
+    }
+    return NextResponse.json({ success: true, requestId: round.id, notifyClients })
   } catch (error) {
     return reviewErrorResponse(error)
   }

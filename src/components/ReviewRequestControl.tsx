@@ -34,6 +34,7 @@ export default function ReviewRequestControl({ videoId, versionLabel, reviewStat
   const t = useTranslations('review')
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState(versionNote ?? '')
+  const [notify, setNotify] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,7 +42,7 @@ export default function ReviewRequestControl({ videoId, versionLabel, reviewStat
     setBusy(true)
     setError(null)
     try {
-      await apiPost(`/api/videos/${videoId}/review-request`, { versionNote: note })
+      await apiPost(`/api/videos/${videoId}/review-request`, { versionNote: note, notifyClients: notify })
       setOpen(false)
       onChanged?.()
     } catch (e) {
@@ -99,6 +100,10 @@ export default function ReviewRequestControl({ videoId, versionLabel, reviewStat
             maxLength={500}
             placeholder={t('notePlaceholder')}
           />
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+            <span>{t('notifyClients')}<span className="block text-xs text-muted-foreground">{t('notifyClientsHint')}</span></span>
+          </label>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>{t('cancel')}</Button>

@@ -2468,7 +2468,9 @@
     "notePlaceholder": "z. B. Neuer Schluss-Claim und Musik neu gemischt",
     "cancel": "Abbrechen",
     "sendConfirm": "Zur Freigabe senden",
-    "failed": "Aktion fehlgeschlagen"
+    "failed": "Aktion fehlgeschlagen",
+    "notifyClients": "Kunden per E-Mail informieren",
+    "notifyClientsHint": "Einmalige Mail „Neue Version“ an die Empfänger mit aktivierten Benachrichtigungen (Vorlage unter Einstellungen → E-Mail-Vorlagen)."
   },
   "fbShare": {
     "previewBadge": "Vorschau",

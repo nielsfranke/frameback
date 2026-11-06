@@ -80,13 +80,15 @@ function download(url: string) {
   a.remove()
 }
 
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(typeof document !== 'undefined' ? document.documentElement.lang || undefined : undefined)
+const fmtDate = (iso?: string | null) => !iso ? '' : new Date(iso).toLocaleDateString(typeof document !== 'undefined' ? document.documentElement.lang || undefined : undefined)
 
 export default function FramebackShareView({
   slug, project, shareToken, authenticatedName, reviewFlow, defaultQuality, onRefresh, onOpenPhotos,
 }: Props) {
   const t = useTranslations('fbShare')
   const player = useRef<PlayerHandle>(null)
+  // Guest links are view-only: no comments, decisions, downloads or status (API omits them)
+  const guest = !!project.isGuest
 
   // ---- videos -------------------------------------------------------------
   const groups: Group[] = useMemo(() => {
@@ -165,7 +167,7 @@ export default function FramebackShareView({
     // Welcome steps follow the project setting "Kunden-Tutorial anzeigen"; shown once per device
     let seen = false
     try { seen = localStorage.getItem(`fb:welcome:${slug}`) === '1' } catch { /* ignore */ }
-    if (project.showClientTutorial !== false && !seen) setWelcome(true)
+    if (!project.isGuest && project.showClientTutorial !== false && !seen) setWelcome(true)
   }, [nameKey, slug, authenticatedName, project.recipients, project.authenticatedRecipientId, project.showClientTutorial])
   const closeWelcome = () => {
     if (name.trim()) saveName(name)
@@ -445,7 +447,7 @@ export default function FramebackShareView({
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between px-2 pb-1 text-sm">
         <b>{t('videos')}</b>
-        <span className="text-xs text-muted-foreground">{t('approvedOf', { done: approvedCount, total: groups.length })}</span>
+        {!guest && <span className="text-xs text-muted-foreground">{t('approvedOf', { done: approvedCount, total: groups.length })}</span>}
       </div>
       {groups.map((g) => {
         const s = statusOf(g.versions[0], reviewFlow)
@@ -463,10 +465,12 @@ export default function FramebackShareView({
             </span>
             <span className="flex min-w-0 flex-col gap-0.5">
               <b className="line-clamp-2 break-words text-sm font-semibold" title={g.name}>{displayName(g.name)}</b>
-              <span className={`flex items-center gap-1.5 text-xs ${statusDot[s]}`}>
-                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-                {t(`status.${s}`)}
-              </span>
+              {!guest && (
+                <span className={`flex items-center gap-1.5 text-xs ${statusDot[s]}`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                  {t(`status.${s}`)}
+                </span>
+              )}
             </span>
           </button>
         )
@@ -484,6 +488,11 @@ export default function FramebackShareView({
   )
 
   const statusLine = () => {
+    if (guest) return (
+      <div className="flex items-start gap-2.5 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
+        <HelpCircle className="mt-0.5 h-4 w-4 flex-none" /><span>{t('guestNotice')}</span>
+      </div>
+    )
     if (isOld) return null
     if (status === 'draft') return (
       <div className="flex items-start gap-2.5 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
@@ -532,7 +541,7 @@ export default function FramebackShareView({
                   {posters[current!.id] && <img src={posters[current!.id]!} alt="" className="h-full w-full object-cover" />}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col"><b className="truncate text-sm">{displayName(group.name)}</b>
-                  <span className={`text-xs ${statusDot[statusOf(current!, reviewFlow)]}`}>{t(`status.${statusOf(current!, reviewFlow)}`)}</span></span>
+                  {!guest && <span className={`text-xs ${statusDot[statusOf(current!, reviewFlow)]}`}>{t(`status.${statusOf(current!, reviewFlow)}`)}</span>}</span>
                 <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">{t('itemsCount', { n: groups.length + (project.hasPhotos ? 1 : 0) })}<ChevronDown className="h-4 w-4" /></span>
               </button>
               {navOpen && <div className="absolute inset-x-0 top-full z-40 mt-1.5 rounded-xl border bg-card p-1.5 shadow-xl">{navList}</div>}
@@ -622,8 +631,8 @@ export default function FramebackShareView({
           )}
         </section>
 
-        {/* side panel */}
-        <aside className="flex min-h-0 w-full flex-none flex-col border-t bg-card md:w-[380px] md:border-l md:border-t-0 lg:w-[400px]">
+        {/* side panel (not for view-only guest links) */}
+        {!guest && <aside className="flex min-h-0 w-full flex-none flex-col border-t bg-card md:w-[380px] md:border-l md:border-t-0 lg:w-[400px]">
           <div role="tablist" className="flex gap-1 border-b px-3 pt-2">
             {(['comments', 'files'] as const).map((k) => (
               <button key={k} id={`fb-tab-${k}`} role="tab" type="button" aria-selected={tab === k} aria-controls="fb-tabpanel" onClick={() => setTab(k)}
@@ -772,7 +781,7 @@ export default function FramebackShareView({
             </div>
           )}
           </div>
-        </aside>
+        </aside>}
       </div>
 
       {/* dialogs */}

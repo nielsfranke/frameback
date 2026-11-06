@@ -2603,6 +2603,7 @@
     "emailInvalid": "Please enter a valid email address.",
     "repliesTo": "replies to {email}",
     "basedOn": "based on",
-    "sourceCode": "Source code"
+    "sourceCode": "Source code",
+    "guestNotice": "This is a view-only link. Comments and approvals aren't available here."
   }
 }

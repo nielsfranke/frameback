@@ -2602,6 +2602,7 @@
     "emailInvalid": "Bitte eine gültige E-Mail-Adresse eingeben.",
     "repliesTo": "Antworten an {email}",
     "basedOn": "basiert auf",
-    "sourceCode": "Quellcode"
+    "sourceCode": "Quellcode",
+    "guestNotice": "Das ist ein Link nur zum Ansehen. Kommentare und Freigaben sind hier nicht möglich."
   }
 }

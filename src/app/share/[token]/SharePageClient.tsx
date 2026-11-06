@@ -1001,9 +1001,9 @@ export default function SharePageClient({ token, newShare = false, reviewFlow = 
     )
   }
 
-  // Frameback: new client view (non-guests with videos). Photos keep using the gallery
-  // above, whose "back" returns here. Guests keep the legacy view for now.
-  if (newShare && !isGuest && project.hasVideos && shareToken) {
+  // Frameback: new client view (incl. view-only guest links). Photos keep using the
+  // gallery above, whose "back" returns here.
+  if (newShare && project.hasVideos && shareToken) {
     return (
       <>
         <FramebackShareView

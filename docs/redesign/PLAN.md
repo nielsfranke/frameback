@@ -249,6 +249,26 @@ model ShareLink {
 - Original und Vorschauen sind keine Zeilen in `VideoAsset`. Eine **gemeinsame Regelauswertung** `policy.downloadable(ctx, file)` gilt für Original, Vorschau, Assets und ZIP.
 - Hinweis: Bei `skipTranscoding` bzw. Wiedergabe des Originals bekommt der Kunde die Originalbytes beim Abspielen. „Download erst nach Freigabe“ ist dann nur eine UI-Regel. Der Admin-Dialog sagt das ausdrücklich.
 
+### 3.7 Umsetzungsstand S1/1 und bewusst offene Punkte (nach Codex-Runde 2)
+
+Umgesetzt in `src/lib/review.ts`, Migration `20261106120256_frameback_review_flow`:
+- Gruppen-Lock-Protokoll, Neustart der Transaktion bei Kollision oder Deadlock
+- READY plus Ablösen der alten Runde in einer Transaktion
+- Exklusivität per partiellem Unique-Index
+- `(groupId, version)` eindeutig, `groupId NOT NULL`
+- atomares `ensureGroup`
+- globaler Idempotenz-Schlüssel mit Abgleich (Fingerprint)
+- Umbenennen auf dem geprüften Stand
+- Protokoll für alle Aktionen
+
+**Bewusst offen bzw. als Betriebsregel festgelegt:**
+- **Nebenwirkungen nach dem Commit** (Clean-Preview-Queue, E-Mails): Schlagen sie fehl, liefert eine Wiederholung `applied=false` und holt sie nicht nach. Upstream hat dieselbe Schwäche. Später kommt eine transaktionale Outbox (S5).
+- **Admin-Freigaben über die Share-Seite verschicken weiterhin E-Mails** wie bisher. Der Admin-PATCH (UI, MCP) verschickt nie welche.
+- **Rollout:** Die Migration erzwingt `groupId NOT NULL`. Alte Images dürfen deshalb **nie** gegen eine migrierte Datenbank laufen. Ein Rollback heißt Backup zurückspielen, kein Image-Wechsel zurück. Der Umstieg ist ein einziger Image-Wechsel (siehe 8.3).
+- **Wiederanlauf einer fehlgeschlagenen Migration:** Wegen `BEGIN/COMMIT` bleibt kein halbes Schema zurück. Ursache beheben (z. B. doppelte Versionsnummern), dann `prisma migrate resolve --rolled-back 20261106120256_frameback_review_flow` und `prisma migrate deploy`.
+- **Neue Gruppen während „Projekt zurücknehmen“:** Sie entstehen ohne Freigabe und ohne Runde, das Zurücknehmen betrifft sie daher nicht. Eine Projekt-Sperre ist unnötig.
+- **HTTP-Vertragstests** (PATCH mit `{name, approved}`, Flag an/aus, Benachrichtigungen) folgen mit dem MCP-Livetest im Staging.
+
 ## 4. Kundenansicht (nach Prototyp v2)
 
 Wie in v1 beschrieben:

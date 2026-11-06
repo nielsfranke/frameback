@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { createVersion } from '@/lib/review'
 import { requireApiAdmin } from '@/lib/auth'
 import { rateLimit } from '@/lib/rate-limit'
 import { sanitizeFilename, validateUploadedFile } from '@/lib/file-validation'
@@ -94,13 +95,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create video record
-    const video = await prisma.video.create({
+    // Create video record (Frameback: version number allocated under the group lock, so
+    // concurrent uploads of the same video never get the same number). `nextVersion`
+    // above is only used for the revision-limit check.
+    void nextVersion
+    const video = await createVersion({
+      projectId,
+      name: videoName,
+      versionLabel: versionLabel || null,
       data: {
-        projectId,
-        name: videoName,
-        version: nextVersion,
-        versionLabel: versionLabel || `v${nextVersion}`,
         originalFileName,
         originalFileSize: BigInt(originalFileSize),
         originalStoragePath: `projects/${projectId}/videos/original-${Date.now()}-${sanitizedOriginalFileName}`,

@@ -6,6 +6,7 @@ import path from 'path'
 import { pipeline } from 'stream/promises'
 import { TEMP_DIR } from './cleanup'
 import { logError, logMessage } from '../lib/logging'
+import { markReady } from '../lib/review'
 
 const DEBUG = process.env.DEBUG_WORKER === 'true'
 
@@ -428,10 +429,11 @@ export async function finalizeVideo(
   debugLog('Updating database with final video data...')
   debugLog('Update data:', updateData)
 
-  await prisma.video.update({
-    where: { id: videoId },
-    data: updateData,
-  })
+  // Frameback: READY and superseding an older version's open approval round happen in
+  // ONE transaction under the group lock, so no client decision can slip in between.
+  // Errors propagate: the job fails and is retried instead of leaving a stale round.
+  const { superseded } = await markReady(videoId, updateData)
+  if (superseded) logMessage(`[REVIEW] Version ${videoId} superseded the open approval round of ${superseded}`)
 
   debugLog('Database updated to READY status')
 }

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { ReviewError, adminOverride, clientDecide, idempotencyKeyFrom, legacyClientApprove } from '@/lib/review'
+import { getCurrentUserFromRequest } from '@/lib/auth'
+import { features } from '@/lib/features'
+import { getClientIpAddress } from '@/lib/utils'
 import { handleApprovalNotification } from '@/lib/notifications'
 import { getAutoApproveProject, isSmtpConfigured } from '@/lib/settings'
 import { verifyProjectAccess } from '@/lib/project-access'
@@ -95,28 +99,47 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: projectMessages.selectedVideoNotFound || 'Selected video not found' }, { status: 404 })
     }
 
-    // Atomic swap: unapprove other versions of the same video, approve the selected one.
-    // Without a transaction, two concurrent approvals of different versions could both win.
-    await prisma.$transaction([
-      prisma.video.updateMany({
-        where: {
-          projectId,
-          name: selectedVideo.name,
-          id: { not: selectedVideoId },
-        },
-        data: {
-          approved: false,
-          approvedAt: null,
-        },
-      }),
-      prisma.video.update({
-        where: { id: selectedVideoId },
-        data: {
+    // Frameback review flow (src/lib/review.ts). All variants lock the version group and
+    // keep "one approved version per video" atomically.
+    //  - admin:                      override, any version
+    //  - client, FEATURE_REVIEW_FLOW: only the current version that was sent "Zur Freigabe"
+    //  - client, flag off:           legacy behaviour (any version), but recorded
+    const actor = {
+      name: authorName || 'Client', // unverified display name
+      verifiedEmail: null, // never trust the body; verified identity comes with the share session (S1 step 2)
+      ip: getClientIpAddress(request),
+    }
+    let applied = true
+    try {
+      if (accessCheck.isAdmin) {
+        // Admin identity from the session, never from the body
+        const admin = await getCurrentUserFromRequest(request)
+        const result = await adminOverride({
+          videoId: selectedVideoId,
           approved: true,
-          approvedAt: new Date(),
-        },
-      }),
-    ])
+          adminUserId: admin?.id ?? null,
+          actorName: admin?.name || admin?.email || 'Admin',
+        })
+        applied = result.changedApproval
+      } else {
+        const idempotencyKey = idempotencyKeyFrom(request.headers.get('idempotency-key'))
+        const result = features.reviewFlow
+          ? await clientDecide({ videoId: selectedVideoId, kind: 'APPROVE', actor, idempotencyKey })
+          : await legacyClientApprove({ videoId: selectedVideoId, actor, idempotencyKey })
+        applied = result.applied
+      }
+    } catch (error) {
+      if (error instanceof ReviewError) {
+        const status = error.code === 'INVALID_IDEMPOTENCY_KEY' ? 400 : 409
+        return NextResponse.json({ error: error.message, code: error.code }, { status })
+      }
+      throw error
+    }
+
+    // Idempotent replay or nothing changed: do not repeat side effects (queue, notifications)
+    if (!applied) {
+      return NextResponse.json({ success: true, replayed: true })
+    }
 
     // Queue clean preview generation if project uses preview for approved playback AND watermarks enabled
     if (project.usePreviewForApprovedPlayback && project.watermarkEnabled) {

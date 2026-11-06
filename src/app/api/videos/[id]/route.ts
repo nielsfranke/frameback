@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { ReviewError, adminUpdateVersion } from '@/lib/review'
 import { deleteFile } from '@/lib/storage'
 import { requireApiAdmin } from '@/lib/auth'
 import { getAutoApproveProject } from '@/lib/settings'
@@ -174,39 +175,24 @@ export async function PATCH(
   return NextResponse.json({ error: videoMessages.videoNotFoundApi || 'Video not found' }, { status: 404 })
     }
 
-    if (approved) {
-      await prisma.video.updateMany({
-        where: {
-          projectId: video.projectId,
-          name: video.name,
-          id: { not: id },
-        },
-        data: {
-          approved: false,
-          approvedAt: null,
-        },
+    // Frameback: rename (moves THIS version to the group of the new name, like the old
+    // name-based grouping the Resolve MCP relies on), label and approval override are
+    // applied atomically under the group lock. Approval stays exclusive, never notifies.
+    try {
+      await adminUpdateVersion({
+        videoId: id,
+        name: name !== undefined ? name.trim() : undefined,
+        versionLabel: versionLabel !== undefined ? versionLabel.trim() : undefined,
+        approved,
+        adminUserId: authResult.id,
+        actorName: authResult.name || authResult.email || 'Admin',
       })
+    } catch (error) {
+      if (error instanceof ReviewError) {
+        return NextResponse.json({ error: error.message, code: error.code }, { status: 409 })
+      }
+      throw error
     }
-
-    const updateData: any = {}
-
-    if (approved !== undefined) {
-      updateData.approved = approved
-      updateData.approvedAt = approved ? new Date() : null
-    }
-
-    if (name !== undefined) {
-      updateData.name = name.trim()
-    }
-
-    if (versionLabel !== undefined) {
-      updateData.versionLabel = versionLabel.trim()
-    }
-
-    await prisma.video.update({
-      where: { id },
-      data: updateData
-    })
 
     if (approved !== undefined) {
       logMessage(`[VIDEO-APPROVAL] Admin toggled approval for video ${id} to ${approved}`)

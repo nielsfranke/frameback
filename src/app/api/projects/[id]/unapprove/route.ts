@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { unapproveProject } from '@/lib/review'
 import { requireApiAdmin } from '@/lib/auth'
 import { rateLimit } from '@/lib/rate-limit'
 import { getConfiguredLocale, loadLocaleMessages } from '@/i18n/locale'
@@ -65,30 +66,13 @@ export async function POST(
       return NextResponse.json({ error: projectMessages.projectNotFoundApi || 'Project not found' }, { status: 404 })
     }
 
-    let unapprovedCount = 0
-
-    // Conditionally unapprove videos based on the parameter
-    if (unapproveVideos) {
-      // Unapprove ALL videos in the project
-      await prisma.video.updateMany({
-        where: { projectId },
-        data: {
-          approved: false,
-          approvedAt: null
-        }
-      })
-
-      unapprovedCount = project.videos.filter(v => v.approved).length
-    }
-
-    // Always unapprove the project
-    await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        status: 'IN_REVIEW',
-        approvedAt: null,
-        approvedVideoId: null
-      }
+    // Frameback: videos (optional), open rounds and project status reset in one locked
+    // transaction via the review flow; every change is logged.
+    const unapprovedCount = await unapproveProject({
+      projectId,
+      adminUserId: authResult.id,
+      actorName: authResult.name || authResult.email || 'Admin',
+      resetVideos: unapproveVideos,
     })
 
     return NextResponse.json({

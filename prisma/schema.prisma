@@ -77,14 +77,14 @@ model Project {
   timestampDisplay String @default("TIMECODE")
 
   // Video processing settings
-  previewResolution String  @default("720p") // "720p", "1080p", or "2160p" (originals can be any resolution including 2160p)
-  skipTranscoding   Boolean @default(false) // Skip transcoding entirely — serve original file directly
-  watermarkEnabled  Boolean @default(true) // Enable/disable watermarks for this project
-  watermarkText     String? // Custom watermark text (null = use default format)
+  previewResolution  String  @default("720p") // "720p", "1080p", or "2160p" (originals can be any resolution including 2160p)
+  skipTranscoding    Boolean @default(false) // Skip transcoding entirely — serve original file directly
+  watermarkEnabled   Boolean @default(true) // Enable/disable watermarks for this project
+  watermarkText      String? // Custom watermark text (null = use default format)
   watermarkPositions String  @default("center") // comma-separated: center, top-left, top-right, bottom-left, bottom-right
   watermarkOpacity   Int     @default(30) // Opacity percentage (10-100)
   watermarkFontSize  String  @default("medium") // small, medium, large
-  applyPreviewLut      Boolean @default(true) // Apply preview LUT during transcoding (for color-calibrated previews)
+  applyPreviewLut    Boolean @default(true) // Apply preview LUT during transcoding (for color-calibrated previews)
 
   // Client share page settings
   allowAssetDownload     Boolean @default(true) // Allow clients to download video assets when project is approved
@@ -102,7 +102,7 @@ model Project {
 
   // Due date tracking
   dueDate     DateTime? // Optional project deadline
-  dueReminder String?   // NONE, DAY_BEFORE, WEEK_BEFORE
+  dueReminder String? // NONE, DAY_BEFORE, WEEK_BEFORE
 
   // Client notification settings (per-project)
   // Note: Approval emails are always IMMEDIATE regardless of this setting
@@ -127,6 +127,7 @@ model Project {
   sharePageAccesses SharePageAccess[] // Share page authentication tracking
   projectUploads    ProjectUpload[] // Client-submitted files via reverse share
   photoAlbums       PhotoAlbum[] // Photo gallery albums
+  videoGroups       VideoGroup[] // Frameback: stable version groups
 
   @@index([clientCompanyId])
 }
@@ -189,19 +190,130 @@ model Video {
   cleanPreview720Path  String?
 
   // Per-video approval
+  // Frameback: `approved`/`approvedAt` are DERIVED from reviewState by src/lib/review.ts
+  // (kept for old read paths and the Resolve MCP). Never set them directly.
   approved   Boolean   @default(false)
   approvedAt DateTime?
+
+  // Frameback review flow
+  groupId     String // stable group of all versions of one video
+  group       VideoGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  reviewState ReviewState @default(DRAFT)
+  versionNote String? // "Neu in Version 3: …", shown to clients
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  analytics VideoAnalytics[]
-  assets    VideoAsset[]
-  comments  Comment[]
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  analytics       VideoAnalytics[]
+  assets          VideoAsset[]
+  comments        Comment[]
+  reviewRequests  ReviewRequest[]
+  reviewDecisions ReviewDecision[]
 
+  @@unique([groupId, version])
   @@index([projectId, version])
   @@index([projectId, name])
+}
+
+// ---------------------------------------------------------------------------
+// Frameback review flow (see docs/redesign/PLAN.md §3.2–3.3)
+// ---------------------------------------------------------------------------
+
+enum ReviewState {
+  DRAFT // "In Arbeit" – clients may comment, not decide
+  IN_REVIEW // sent for approval by the studio
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+enum ReviewOutcome {
+  APPROVED
+  CHANGES_REQUESTED
+  WITHDRAWN
+  SUPERSEDED
+}
+
+enum DecisionKind {
+  APPROVE
+  REQUEST_CHANGES
+  REVOKE
+  ADMIN_OVERRIDE
+  SENT_FOR_REVIEW
+  WITHDRAWN
+}
+
+enum ApprovalRule {
+  ANY
+  ALL
+}
+
+/// All versions of one video in a project. Video.name stays in sync for old
+/// read paths and the Resolve MCP, which group by name.
+model VideoGroup {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  videos         Video[]
+  reviewRequests ReviewRequest[]
+
+  @@unique([projectId, name])
+}
+
+/// One approval round for one version. At most one open round per group
+/// (partial unique index in the migration: groupId WHERE closedAt IS NULL).
+model ReviewRequest {
+  id            String           @id @default(cuid())
+  groupId       String
+  group         VideoGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  videoId       String
+  video         Video            @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  requestedById String? // admin user; null = historic/migrated
+  requestedAt   DateTime         @default(now())
+  rule          ApprovalRule     @default(ANY)
+  closedAt      DateTime?
+  outcome       ReviewOutcome?
+  decisions     ReviewDecision[]
+
+  @@index([groupId])
+  @@index([videoId])
+}
+
+/// Audit log of every decision, including admin overrides and migrated history.
+model ReviewDecision {
+  id             String                  @id @default(cuid())
+  requestId      String?
+  request        ReviewRequest?          @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  videoId        String
+  video          Video                   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  kind           DecisionKind
+  actorName      String
+  verifiedEmail  String? // only from a verified OTP session, never from the request body
+  viewerKeyHash  String?
+  adminUserId    String?
+  note           String?
+  idempotencyKey String                  @unique
+  ip             String?
+  createdAt      DateTime                @default(now())
+  comments       ReviewDecisionComment[]
+
+  @@index([videoId])
+  @@index([requestId])
+}
+
+/// Comments handed over with "Änderungen anfordern" (text snapshot for the audit trail).
+model ReviewDecisionComment {
+  decisionId   String
+  decision     ReviewDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  commentId    String
+  textSnapshot String
+
+  @@id([decisionId, commentId])
 }
 
 model VideoAsset {
@@ -217,8 +329,8 @@ model VideoAsset {
   category    String? // Optional category: "image", "audio", "project", "other"
 
   // Upload metadata
-  uploadedBy     String? // User ID or "client" for client uploads
-  uploadedByName String? // Display name of uploader
+  uploadedBy          String? // User ID or "client" for client uploads
+  uploadedByName      String? // Display name of uploader
   uploadedBySessionId String? // Stable share/admin session identifier for pending asset ownership
 
   uploadCompletedAt DateTime? // null until file transfer finishes; orphaned records stay null
@@ -334,7 +446,21 @@ model Comment {
 
   // Annotation support
   timecodeEnd String? // Optional end timecode for time range comments
-  annotations Json?   // JSONB storing drawing annotation shapes
+  annotations Json? // JSONB storing drawing annotation shapes
+
+  // Frameback: editing, soft delete, ownership, resolve status, frame accuracy
+  editedAt      DateTime?
+  deletedAt     DateTime? // soft delete; replies keep a "deleted" placeholder
+  deletedBy     String? // "client" | admin user id
+  authorKeyHash String? // sha256 of the vt_viewer browser key, never the key itself
+  verifiedEmail String? // only from a verified OTP session, never from the request body
+  resolvedAt    DateTime?
+  resolvedById  String?
+  resolvedVia   String? // "admin" | "resolve"
+  frame         Int? // start frame in the file
+  frameEnd      Int?
+  fpsNum        Int? // rational frame rate, e.g. 30000/1001
+  fpsDen        Int?
 
   // Admin user tracking (for internal comments)
   userId String? // Admin user who created this comment
@@ -395,10 +521,10 @@ model Settings {
   accentColor  String @default("blue") // Preset accent color name
 
   // Company Branding
-  companyName String? @default("Studio") // Displayed in feedback/comments
-  brandingLogoPath String? // Path to uploaded custom SVG logo
+  companyName         String? @default("Studio") // Displayed in feedback/comments
+  brandingLogoPath    String? // Path to uploaded custom SVG logo
   brandingFaviconPath String? // Path to uploaded custom favicon (svg/png/ico)
-  emailHeaderStyle String @default("LOGO_AND_NAME") // NONE, LOGO_ONLY, NAME_ONLY, LOGO_AND_NAME
+  emailHeaderStyle    String  @default("LOGO_AND_NAME") // NONE, LOGO_ONLY, NAME_ONLY, LOGO_AND_NAME
 
   // SMTP Email Configuration
   smtpServer      String?
@@ -413,16 +539,16 @@ model Settings {
 
   // Default Video Processing Settings
   defaultPreviewResolution  String? @default("720p")
-  defaultSkipTranscoding   Boolean @default(false)
-  defaultWatermarkEnabled  Boolean @default(true)
-  defaultWatermarkText     String?
+  defaultSkipTranscoding    Boolean @default(false)
+  defaultWatermarkEnabled   Boolean @default(true)
+  defaultWatermarkText      String?
   defaultWatermarkPositions String  @default("center") // comma-separated: center, top-left, top-right, bottom-left, bottom-right
   defaultWatermarkOpacity   Int     @default(30) // Opacity percentage (10-100)
   defaultWatermarkFontSize  String  @default("medium") // small, medium, large
-  defaultApplyPreviewLut      Boolean @default(true) // Apply preview LUT during transcoding by default
-  maxUploadSizeGB          Int      @default(1) // Maximum file size per upload in GB (1-1000)
-  maxCommentAttachments    Int      @default(10) // Maximum files per comment attachment batch (1-50)
-  maxReverseShareFiles     Int      @default(10) // Maximum files per reverse share upload session (1-500)
+  defaultApplyPreviewLut    Boolean @default(true) // Apply preview LUT during transcoding by default
+  maxUploadSizeGB           Int     @default(1) // Maximum file size per upload in GB (1-1000)
+  maxCommentAttachments     Int     @default(10) // Maximum files per comment attachment batch (1-50)
+  maxReverseShareFiles      Int     @default(10) // Maximum files per reverse share upload session (1-500)
 
   // Default Comment Timestamp Display
   // TIMECODE = HH:MM:SS:FF (or DF), AUTO = MM:SS or HH:MM:SS based on video length
@@ -436,9 +562,9 @@ model Settings {
 
   // Default Client Access Defaults
   defaultAllowReverseShare  Boolean @default(false) // Default: allow clients to submit files directly to project
-  defaultShowClientTutorial Boolean @default(true)  // Default: show interactive tutorial for first-time visitors
-  defaultAllowAssetDownload Boolean @default(true)  // Default: allow clients to download approved assets
-  defaultClientCanApprove   Boolean @default(true)  // Default: allow clients to approve videos
+  defaultShowClientTutorial Boolean @default(true) // Default: show interactive tutorial for first-time visitors
+  defaultAllowAssetDownload Boolean @default(true) // Default: allow clients to download approved assets
+  defaultClientCanApprove   Boolean @default(true) // Default: allow clients to approve videos
 
   // Project Behavior
   autoApproveProject Boolean @default(true) // Auto-approve project when all videos approved
@@ -757,14 +883,14 @@ model CalendarToken {
 
 // Client Directory - Individual Contacts
 model ClientContact {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   companyId String
   company   ClientCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name      String
   email     String?
-  language  String?  // Preferred language for emails (null = use system default)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  language  String? // Preferred language for emails (null = use system default)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   @@index([companyId])
   @@index([email])

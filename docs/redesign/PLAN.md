@@ -387,6 +387,7 @@ Jeder Schritt ist ein deploybarer Stand hinter Feature-Flags, wird im Staging ge
 | **S1-Umstieg** | Erster echter Umstieg nach 8.3 mit S1 | Live auf eigenem Image | 3–5 |
 | **S2 Studio-Ansicht und Portal** | Projektseite neu, Ordner (`Folder`), Ordnerbaum, Breadcrumbs, Strukturvorschlag Kunde/Jahr, Teilen-Dialog mit `shareContent`, Kundenportal im neuen Design, `nl` entfernen | Projekte in Ordnern verwaltbar, Vorschlag übernehm- und rückgängig machbar, `shareContent` serverseitig wirksam | 10–16 |
 | ~~S3 Ordner-Shares~~ | entfällt (Entscheidung v3) | – | – |
+| **S2+ Thumbnail aus Player-Position** (Wunsch Niels, 06.11.) | Im Studio-Player „Als Thumbnail verwenden“ an der aktuellen Stelle: `POST /api/videos/:id/thumbnail {seconds}` (Admin). Erzeugt per ffmpeg ein Bild aus dem Original an genau dieser Stelle (Worker-Job, auch für S3-Speicher), legt es als Asset (Kategorie `image`) ab und setzt es als Thumbnail. Das bestehende „Asset als Thumbnail setzen“ bleibt. | Bild entspricht dem Frame (±1 Frame), erscheint in Kundenliste und Willkommensdialog, Asset ist in „Vorschaubilder“ herunterladbar | 1–2 |
 | **S4 Resolve** | Frames und rationale fps, Kommentare mit Cursor und Tombstones, `resolved`, MCP-Werkzeuge | Rendern, Upload, Kommentar, Marker, erledigt, Status | 7–12 |
 | **S5 Ausbau** | `ALL`-Freigeber, Drag & Drop, Asset-Zwecke, Upgrade PG 18 und Redis 8, alte Felder entfernen | je nach Umfang | 6–11 |
 

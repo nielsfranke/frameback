@@ -12,6 +12,8 @@ import PhotoAlbumsBlock from '@/components/PhotoAlbumsBlock'
 import { ArrowLeft, Settings, ArrowUpDown, Video, FolderUp, Images, ChevronDown, ChevronUp } from 'lucide-react'
 import { apiFetch } from '@/lib/api-client'
 import { useTranslations } from 'next-intl'
+import { useFeatures } from '@/components/FeaturesProvider'
+import StudioProjectPage from '@/components/studio/project/StudioProjectPage'
 import { logError } from '@/lib/logging'
 
 // Force dynamic rendering (no static pre-rendering)
@@ -19,7 +21,13 @@ export const dynamic = 'force-dynamic'
 
 const SECTIONS_COLLAPSED_KEY = 'vitransfer-admin-project-sections-collapsed'
 
-export default function ProjectPage() {
+export default function ProjectPageSwitch() {
+  const { studioV2 } = useFeatures()
+  const params = useParams()
+  return studioV2 ? <StudioProjectPage id={params?.id as string} /> : <ProjectPage />
+}
+
+function ProjectPage() {
   const t = useTranslations('projects')
   const tc = useTranslations('common')
   const params = useParams()

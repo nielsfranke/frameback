@@ -51,6 +51,8 @@ export async function GET(
           orderBy: { version: 'desc' },
           include: { group: { select: { sortOrder: true } } },
         },
+        folder: { select: { id: true, name: true } },
+        clientCompany: { select: { id: true, name: true } },
         comments: {
           where: { parentId: null },
           include: {

@@ -957,6 +957,12 @@ function Bubble({ c, editing, setEditing, onSave, onDelete, onJump, t, hideTime,
         ) : (
           <div className="mt-1 whitespace-pre-wrap break-words text-sm [&_a]:text-primary [&_a]:underline" dangerouslySetInnerHTML={{ __html: safeHtml(c.content) }} />
         )}
+        {c.resolvedAt && !c.deleted && !c.parentId && (
+          <div className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-success">
+            <Check className="h-3 w-3" aria-hidden />
+            {t('studioDone')}
+          </div>
+        )}
         {c.canEdit && !isEditing && (
           <div className="mt-1 flex gap-1">
             <button type="button" onClick={() => setEditing({ id: c.id, text: toPlainText(c.content) })} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"><Pencil className="h-3 w-3" />{t('edit')}</button>

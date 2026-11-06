@@ -37,6 +37,8 @@ export interface ShareComment {
   deleted?: boolean
   canEdit?: boolean
   parentId?: string | null
+  /** set when the studio marked the thread done */
+  resolvedAt?: string | null
   replies?: ShareComment[]
 }
 

@@ -60,6 +60,8 @@ export async function GET(request: NextRequest) {
     })
 
     // Frameback: real progress per project from the current version of each video
+    // (= highest READY one, exactly what the client sees in the share view; a newer
+    // version still processing is not visible to the client yet)
     const ready = await prisma.video.findMany({
       where: { projectId: { in: projects.map((p) => p.id) }, status: 'READY' },
       select: { projectId: true, groupId: true, reviewState: true, approved: true },

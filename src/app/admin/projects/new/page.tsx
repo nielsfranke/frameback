@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useFeatures } from '@/components/FeaturesProvider'
@@ -29,6 +29,7 @@ export default function NewProjectPage() {
   // studio: folder for the new project (suggested from the client, always changeable)
   const [folderId, setFolderId] = useState<string>('')
   const [folderTouched, setFolderTouched] = useState(false)
+  const clientTouched = useRef(false)
   const tc = useTranslations('common')
   const [loading, setLoading] = useState(false)
   const [isShareOnly, setIsShareOnly] = useState(false)
@@ -71,10 +72,8 @@ export default function NewProjectPage() {
     if (client) {
       apiFetch(`/api/clients/${client}`).then((r) => (r.ok ? r.json() : null)).then((d) => {
         const c = d?.company
-        // only while the client field is still untouched
-        if (c?.id && c?.name) {
-          setCompanyName((cur) => { if (cur) return cur; setClientCompanyId(c.id); return c.name })
-        }
+        // only while the user has not touched the client field
+        if (c?.id && c?.name && !clientTouched.current) { setCompanyName(c.name); setClientCompanyId(c.id) }
       }).catch(() => {})
     }
   }, [studioV2])
@@ -190,6 +189,7 @@ export default function NewProjectPage() {
               <ClientSelector
                 companyName={companyName}
                 onCompanyChange={(name, id) => {
+                  clientTouched.current = true
                   setCompanyName(name)
                   setClientCompanyId(id)
                 }}

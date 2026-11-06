@@ -86,15 +86,15 @@ export async function applyClientBackfill(confirmed?: ConfirmedItem[]) {
   const log: Array<ConfirmedItem & { result: 'linked' | 'skipped'; clientId?: string }> = []
   let created = 0
   await prisma.$transaction(async (tx) => {
-    for (const it of items) {
+    // backfills are rare: one at a time (no lock cycles between runs), projects in id order
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('frameback-client-backfill'))`
+    for (const it of [...items].sort((a, b) => a.projectId.localeCompare(b.projectId))) {
       const [p] = await tx.$queryRaw<Array<{ companyName: string | null; clientCompanyId: string | null }>>`
         SELECT "companyName", "clientCompanyId" FROM "Project" WHERE id = ${it.projectId} FOR UPDATE`
       if (!p || p.clientCompanyId || !p.companyName || nameKey(p.companyName) !== nameKey(it.companyName)) {
         log.push({ ...it, result: 'skipped' }); continue
       }
       const key = nameKey(it.clientName)
-      // one find-or-create per normalized name at a time (other backfill runs wait here)
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'frameback-client:' + key}))`
       const same = (await tx.clientCompany.findMany({ select: { id: true, name: true } })).filter((c) => nameKey(c.name) === key)
       let clientId: string | undefined
       if (it.clientId) {

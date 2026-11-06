@@ -1,77 +1,112 @@
-# ViTransfer
+<p align="center">
+  <img src="public/icon.svg" alt="Frameback logo" width="96">
+</p>
 
-> **Docker repo change:** From v1.0.0 onward, the Docker image moved from `crypt010/vitransfer` to `mansivisuals/vitransfer`. If you are upgrading an existing setup, update your Docker Compose, Quadlet, or manual pull commands to use the new repository.
+<h1 align="center">Frameback</h1>
 
-**Professional Video Review & Approval Platform for Filmmakers**
+<p align="center">
+  <strong>Self-hosted video review and approval for filmmakers and their clients.</strong><br>
+  A fork of <a href="https://github.com/MansiVisuals/ViTransfer">ViTransfer</a> with a redesigned client review experience.
+</p>
 
-ViTransfer is a self-hosted web app for video teams to share work with clients, collect feedback, and manage approvals.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
+  <a href="https://github.com/MansiVisuals/ViTransfer"><img src="https://img.shields.io/badge/based%20on-ViTransfer-555" alt="Based on ViTransfer"></a>
+</p>
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/mansivisuals/vitransfer)](https://hub.docker.com/r/mansivisuals/vitransfer)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-[![GitHub](https://img.shields.io/badge/github-MansiVisuals%2FViTransfer-blue)](https://github.com/MansiVisuals/ViTransfer)
-[![Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/E1E215DBM4)
-
-[![Clean Install Test](https://github.com/MansiVisuals/ViTransfer/actions/workflows/test-clean-install.yml/badge.svg)](https://github.com/MansiVisuals/ViTransfer/actions/workflows/test-clean-install.yml)
-[![Upgrade Test](https://github.com/MansiVisuals/ViTransfer/actions/workflows/test-upgrade.yml/badge.svg)](https://github.com/MansiVisuals/ViTransfer/actions/workflows/test-upgrade.yml)
-
----
-
-> **Maintenance mode** — ViTransfer is feature-complete and production-ready. It now receives **weekly security patches only**: no new features, and bug fixes only when something breaks a normal install. The update pipeline is fully automated and gated on tests — 19 clean-install and 22 upgrade tests must pass against the exact tree being shipped before any image is published, for amd64 and arm64. Pull requests are still welcome and reviewed. See the [announcement](https://github.com/MansiVisuals/ViTransfer/discussions/100) for details.
->
-> Always maintain backups following the 3-2-1 principle (3 copies, 2 different media, 1 offsite) and check release notes before updating.
-
-**Support Development:** If you find ViTransfer useful, consider [supporting on Ko-fi](https://ko-fi.com/E1E215DBM4) to help fund continued development.
-
-**NOTE:** Code-assisted development with AI, built with focus on security and best practices.
+<p align="center">
+  <img src="docs/screenshots/frameback/share-review.png" alt="Client review page with version picker, timeline comment markers and approval bar" width="860">
+</p>
 
 ---
 
-## Quick Start
+## Why this fork
 
-1. Download [`docker-compose.yml`](docker-compose.yml) and [`.env.example`](.env.example)
-2. Create `.env` and generate the required secrets
-3. Start with `docker compose up -d`
-4. Open `http://localhost:4321` and log in
+Clients told us that the review page was hard to navigate. They often weren't sure which version was current, where to find files, how to switch between videos, or whether they had approved something by accident. They also couldn't fix a typo in a comment they had posted. Frameback rebuilds the client side around these problems and keeps everything else that makes ViTransfer good: self-hosting, share links without accounts, watermarked previews, resumable uploads and transcoding.
 
-## Documentation
+### For clients (share link, no account)
 
-Full docs live in the [GitHub Wiki](https://github.com/MansiVisuals/ViTransfer/wiki) and are mirrored in [`docs/wiki`](docs/wiki/) (v1.0.0).
+- **The current version is always obvious.** A version picker labels the current cut, shows its comment count and the studio's "what's new" note. Older versions get a clear banner with a jump back to the current one.
+- **Comments right on the timeline.** Timestamped comments appear as markers on the timeline. Click a marker to jump to the moment, or click a comment to seek the player.
+- **Edit and delete your own comments** from any device, just by using the same name. No codes, no e-mail, no sign-up.
+- **No accidental approvals.** Clients can approve or request changes only on a version the studio has explicitly sent for approval, and only on the current one.
+- **Files in one place.** Downloads and assets live in a "Files" tab, unlocked after approval.
+- **Optional reply e-mails.** A client may leave an address to hear back when the studio replies to *their own* comments. It's throttled, capped per day, and has a one-click unsubscribe.
+- Works on phones and in portrait. English and German.
 
-| Topic | Link |
-|-------|------|
-| Home | [docs/wiki/Home.md](docs/wiki/Home.md) |
-| Installation | [docs/wiki/Installation.md](docs/wiki/Installation.md) |
-| Configuration | [docs/wiki/Configuration.md](docs/wiki/Configuration.md) |
-| Features | [docs/wiki/Features.md](docs/wiki/Features.md) |
-| Admin Settings | [docs/wiki/Admin-Settings.md](docs/wiki/Admin-Settings.md) |
-| Client Guide | [docs/wiki/Client-Guide.md](docs/wiki/Client-Guide.md) |
-| Troubleshooting | [docs/wiki/Troubleshooting.md](docs/wiki/Troubleshooting.md) |
+### For the studio
 
-## Screenshots
+- **"Send for approval"** per version, with an optional note and an optional notification e-mail. Uploading a newer version replaces the open request automatically.
+- **Audit trail** for every decision (sent, approved, changes requested, withdrawn, overridden).
+- Studio replies are threaded under the client's comment and marked as such.
+- Compatible with [resolve-studio-mcp](https://github.com/nielsfranke/resolve-studio-mcp) (upload from DaVinci Resolve, pull comments back into the timeline).
 
-| | |
-|---|---|
-| **Login** | **Dashboard** |
-| <img src="docs/screenshots/Login Page.png" alt="Login Page" width="400"> | <img src="docs/screenshots/Dashboard.png" alt="Dashboard" width="400"> |
-| **Project View** | **Video Review** |
-| <img src="docs/screenshots/Project View.png" alt="Project View" width="400"> | <img src="docs/screenshots/Share Page - Player View.png" alt="Share Page - Player View" width="400"> |
-| **Version Compare** | **Approved Project** |
-| <img src="docs/screenshots/Share Page - Slider Compare.png" alt="Share Page - Slider Compare" width="400"> | <img src="docs/screenshots/Share Page - Approved.png" alt="Share Page - Approved" width="400"> |
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/frameback/share-versions.png" alt="Version picker"><br><sub>Version picker with comment counts and change notes</sub></td>
+    <td width="50%"><img src="docs/screenshots/frameback/share-previous-version.png" alt="Older version with comments and studio reply"><br><sub>Older version: clear banner, comment thread with studio reply</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/frameback/studio-send-for-approval.png" alt="Send for approval dialog"><br><sub>Studio: send a version for approval</sub></td>
+    <td><img src="docs/screenshots/frameback/studio-project.png" alt="Studio project page"><br><sub>Studio: versions and review state</sub></td>
+  </tr>
+</table>
 
-See all screenshots in the [wiki](docs/wiki/Screenshots.md).
+<p align="center"><img src="docs/screenshots/frameback/share-mobile.png" alt="Mobile review page" width="300"></p>
 
-## Contributing
+<sub>Screenshots use synthetic demo footage and fictional names.</sub>
 
-We're community-driven — feedback, issues, and PRs are more than welcome.
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [Discussions](https://github.com/MansiVisuals/ViTransfer/discussions).
+## Status
 
-## Support
+Frameback runs in production for a small studio. New behaviour ships behind feature flags, so you can upgrade first and switch features on later:
 
-- [Issues](https://github.com/MansiVisuals/ViTransfer/issues)
-- [Discussions](https://github.com/MansiVisuals/ViTransfer/discussions)
-- [Docker Hub](https://hub.docker.com/r/mansivisuals/vitransfer)
-- [Support on Ko-fi](https://ko-fi.com/E1E215DBM4)
+| Variable | Default | Effect |
+|---|---|---|
+| `FEATURE_NEW_SHARE` | `false` | New client review page |
+| `FEATURE_REVIEW_FLOW` | `false` | Clients can approve only versions the studio sent for approval |
 
----
+Still planned: a studio-side redesign with folders and a client portal, a thumbnail picker that grabs the frame at the player position, and more Resolve integration.
 
-Made for filmmakers and video professionals.
+## Quick start
+
+There is no published image yet, so build it from source:
+
+```bash
+git clone https://github.com/nielsfranke/frameback.git
+cd frameback
+docker build -t frameback:local .
+
+cp .env.example .env          # fill in the secrets (see comments in the file)
+cat >> .env <<'EOF'
+FRAMEBACK_IMAGE=frameback:local
+NEXT_PUBLIC_APP_URL=https://review.example.com
+FEATURE_NEW_SHARE=true
+EOF
+
+docker compose -p frameback --env-file .env -f deploy/prod/docker-compose.yml up -d
+```
+
+The app is published on `APP_PORT`. Put it behind a reverse proxy with TLS. For a quick local test without TLS, use `NEXT_PUBLIC_APP_URL=http://localhost:<APP_PORT>` and `HTTPS_ENABLED=false`.
+
+### Coming from ViTransfer
+
+Frameback uses the same database and storage layout. All its migrations are additive, so existing projects, comments and **share links keep working**. Keep your `ENCRYPTION_KEY`, because stored share passwords and SMTP credentials are encrypted with it. Take a database backup first. [`scripts/cutover/cutover.sh`](scripts/cutover/cutover.sh) is the script we used to move a live instance with about a minute of downtime and automatic rollback. Read it before you use it, because it is written for our setup.
+
+## Development
+
+```bash
+npm ci
+npm run dev                   # needs Postgres + Redis, see .env.example
+npm test                      # unit + integration tests (integration needs a test DB)
+npm run lint
+```
+
+The design plan and decisions are in [`docs/redesign/PLAN.md`](docs/redesign/PLAN.md). The upstream documentation in [`docs/wiki`](docs/wiki/) still applies to everything Frameback didn't change.
+
+## License and credits
+
+Frameback is licensed under the [GNU AGPL-3.0](LICENSE), like ViTransfer. If you run a modified version as a network service, you must offer its source to your users. Every Frameback page links to the source code. Set `NEXT_PUBLIC_SOURCE_CODE_URL` if you host your own fork.
+
+Built on [ViTransfer](https://github.com/MansiVisuals/ViTransfer) by MansiVisuals. If you want the original, stable project, use it, and consider [supporting it on Ko-fi](https://ko-fi.com/E1E215DBM4).
+
+Developed with AI assistance (Claude, Codex), with tests and review for every change.

@@ -96,7 +96,10 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       app: {condition: service_healthy}
-    environment: *appenv
+    environment:
+      <<: *appenv
+      # entrypoint default is the upstream container_name "vitransfer-app"
+      APP_HOST: app
     volumes:
       - uploads:/app/uploads
     networks: [backend]

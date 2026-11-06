@@ -276,7 +276,7 @@ export async function sendTestNotification(
   }
 
   const payload: PushNotificationPayload = {
-    title: webPush.testTitle || 'ViTransfer Test',
+    title: webPush.testTitle || 'Frameback Test',
     body: (webPush.testBodyForDevice || 'Test notification for {device}')
       .replace('{device}', subscription.deviceName || webPush.thisDevice || 'this device'),
     icon: '/brand/icon-192.svg',
@@ -367,7 +367,7 @@ export async function createNotificationPayload(
     default:
       return {
         ...basePayload,
-        title: webPush.defaultNotificationTitle || 'ViTransfer Notification',
+        title: webPush.defaultNotificationTitle || 'Frameback Notification',
         body: webPush.defaultNotificationBody || 'You have a new notification',
       }
   }

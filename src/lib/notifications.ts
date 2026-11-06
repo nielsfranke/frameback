@@ -445,7 +445,7 @@ export async function flushPendingAdminNotifications(): Promise<void> {
     }
 
     const emailSettings = await getEmailSettings()
-    const companyName = emailSettings.companyName || 'ViTransfer'
+    const companyName = emailSettings.companyName || 'Frameback'
     const projects = Object.values(projectGroups)
 
     logMessage(`[FLUSH-ADMIN] Sending ${validNotifications.length} queued notification(s) to ${admins.length} admin(s)`)
@@ -571,7 +571,7 @@ export async function flushPendingClientNotifications(projectId: string): Promis
     }
 
     const emailSettings = await getEmailSettings()
-    const companyName = emailSettings.companyName || 'ViTransfer'
+    const companyName = emailSettings.companyName || 'Frameback'
     const shareUrl = await generateShareUrl(project.slug)
     const notifications = validNotifications.map(n =>
       normalizeNotificationDataTimecode(n.data as any)

@@ -61,7 +61,7 @@ interface AdminSummaryData {
  * Client notification summary
  */
 export async function generateNotificationSummaryEmail(data: NotificationSummaryData): Promise<{ subject: string; html: string }> {
-  const companyName = data.companyName || 'ViTransfer'
+  const companyName = data.companyName || 'Frameback'
   const brand = getEmailBrand(data.accentColor)
   const emailMessages: Record<string, any> = await loadEmailMessages(data.locale || 'en').catch(() => ({}))
   const summaryMessages = emailMessages.clientActivitySummary || {}
@@ -168,7 +168,7 @@ export async function generateNotificationSummaryEmail(data: NotificationSummary
  * Admin summary - multi-project
  */
 export async function generateAdminSummaryEmail(data: AdminSummaryData): Promise<{ subject: string; html: string }> {
-  const companyName = data.companyName || 'ViTransfer'
+  const companyName = data.companyName || 'Frameback'
   const brand = getEmailBrand(data.accentColor)
   const emailMessages: Record<string, any> = await loadEmailMessages(data.locale || 'en').catch(() => ({}))
   const summaryMessages = emailMessages.adminActivitySummary || {}

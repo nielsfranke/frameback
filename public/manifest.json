@@ -1,7 +1,7 @@
 {
-  "name": "ViTransfer",
-  "short_name": "ViTransfer",
-  "description": "Professional video review and approval platform",
+  "name": "Frameback",
+  "short_name": "Frameback",
+  "description": "Video review and delivery for studios",
   "start_url": "/admin",
   "display": "standalone",
   "background_color": "#0a0a0a",
@@ -27,7 +27,10 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["productivity", "business"],
+  "categories": [
+    "productivity",
+    "business"
+  ],
   "screenshots": [],
   "shortcuts": [
     {

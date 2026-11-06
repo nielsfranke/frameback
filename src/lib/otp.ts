@@ -196,7 +196,7 @@ export async function sendOTPEmail(
   locale: string = 'en'
 ): Promise<void> {
   const settings = await getEmailSettings()
-  const companyName = settings.companyName || 'ViTransfer'
+  const companyName = settings.companyName || 'Frameback'
   const brand = getEmailBrand(settings.accentColor)
   const messages = await loadLocaleMessages(locale)
   const otpMessages = messages?.shareOtpEmail || {}

@@ -359,7 +359,7 @@ export default function PhotoDeliveryGallery({
           rel="noopener noreferrer"
           className="text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
         >
-          Powered by ViTransfer
+          Powered by Frameback
         </a>
       </footer>
 

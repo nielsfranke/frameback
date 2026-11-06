@@ -1103,7 +1103,7 @@ export default function SharePageClient({ token, newShare = false, reviewFlow = 
               rel="noopener noreferrer"
               className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
             >
-              Powered by ViTransfer
+              Powered by Frameback
             </a>
           </div>
         </div>

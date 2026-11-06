@@ -16,7 +16,7 @@ import { logError, logMessage } from '../lib/logging'
 export async function processClientNotifications() {
   try {
     const emailSettings = await getEmailSettings()
-    const companyName = emailSettings.companyName || 'ViTransfer'
+    const companyName = emailSettings.companyName || 'Frameback'
 
     const now = new Date()
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`

@@ -1,5 +1,6 @@
 'use client'
 
+import { SOURCE_CODE_URL } from '@/lib/app-brand'
 import { useAuth } from '@/components/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Bug, Building2, Calendar, ChevronLeft, ChevronRight, CircleHelp, Coffee, Container, ExternalLink, FolderKanban, LogOut, Menu, Settings, Shield, User, Users, X } from 'lucide-react'
@@ -33,7 +34,7 @@ function GithubIcon({ className }: { className?: string }) {
 
 function AboutDialog({ showLabels }: { showLabels: boolean }) {
   const t = useTranslations('nav')
-  const repoUrl = 'https://github.com/MansiVisuals/ViTransfer'
+  const repoUrl = SOURCE_CODE_URL // Frameback source (AGPL); upstream: UPSTREAM_URL
   const websiteUrl = 'https://www.vitransfer.com'
   const appVersion = process.env.NEXT_PUBLIC_APP_VERSION
 
@@ -196,7 +197,7 @@ export default function AdminSidebar() {
         <Link
           href="/admin/projects"
           className={`flex min-w-0 items-center rounded-lg transition-opacity hover:opacity-80 ${showLabels ? 'max-w-32' : 'max-w-10'}`}
-          title="ViTransfer"
+          title="Frameback"
         >
           <BrandLogo height={28} maxWidth="100%" ariaHidden />
         </Link>
@@ -301,7 +302,7 @@ export default function AdminSidebar() {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <Link href="/admin/projects" className="flex min-w-0 max-w-32 items-center" title="ViTransfer">
+        <Link href="/admin/projects" className="flex min-w-0 max-w-32 items-center" title="Frameback">
           <BrandLogo height={26} maxWidth="100%" ariaHidden />
         </Link>
       </div>

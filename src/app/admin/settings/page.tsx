@@ -736,7 +736,7 @@ export default function GlobalSettingsPage() {
         smtpPassword: smtpPassword || null,
         smtpFromAddress: smtpFromAddress || null,
         smtpSecure: smtpSecure || 'STARTTLS',
-        companyName: companyName || 'ViTransfer',
+        companyName: companyName || 'Frameback',
         accentColor: accentColor || 'blue',
       }
 

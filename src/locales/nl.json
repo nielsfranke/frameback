@@ -63,13 +63,13 @@
     "noResults": "Geen resultaten gevonden",
     "confirmDelete": "Weet je het zeker? Deze actie kan niet ongedaan worden gemaakt.",
     "unsavedChanges": "Je hebt niet-opgeslagen wijzigingen",
-    "poweredBy": "Mogelijk gemaakt door ViTransfer",
+    "poweredBy": "Mogelijk gemaakt door Frameback",
     "pageOf": "Pagina {page} van {pages}",
     "select": "Selecteren",
     "selectAll": "Alles Selecteren",
     "deselectAll": "Alles Deselecteren",
     "today": "Vandaag",
-    "viTransfer": "ViTransfer",
+    "viTransfer": "Frameback",
     "videoReviewTagline": "Videoreview, Feedback en Oplevering",
     "changing": "Wijzigen..."
   },
@@ -202,7 +202,7 @@
     "users": "Gebruikers",
     "settings": "Instellingen",
     "security": "Beveiliging",
-    "aboutViTransfer": "Over ViTransfer",
+    "aboutViTransfer": "Over Frameback",
     "about": "Over",
     "aboutDescription": "Open-source platform voor videoreview en goedkeuring, gemaakt voor creatieve professionals.",
     "website": "vitransfer.com",
@@ -1459,7 +1459,7 @@
       "changingNotificationProviderNotSupported": "Het wijzigen van de notificatieprovider wordt niet ondersteund. Maak in plaats daarvan een nieuwe bestemming aan.",
       "failedToUpdateNotificationDestination": "Bijwerken van notificatiebestemming mislukt",
       "failedToDeleteNotificationDestination": "Verwijderen van notificatiebestemming mislukt",
-      "testNotificationTitle": "ViTransfer Testnotificatie",
+      "testNotificationTitle": "Frameback Testnotificatie",
       "testNotificationBody": "Als je dit hebt ontvangen, is je externe notificatiebestemming correct geconfigureerd.",
       "failedToQueueTestNotification": "Testnotificatie in wachtrij plaatsen mislukt",
       "failedToFetchNotificationLogs": "Ophalen van notificatielogboeken mislukt",
@@ -1910,7 +1910,7 @@
   },
   "device": {
     "authorizeTitle": "Workflow-integratie Autoriseren",
-    "authorizeDescription": "Verbind je workflow-integratie met ViTransfer",
+    "authorizeDescription": "Verbind je workflow-integratie met Frameback",
     "signInTitle": "Inloggen",
     "signInDescription": "Authenticeer om de workflow-integratie te autoriseren",
     "authorizeDevice": "Apparaat Autoriseren",
@@ -2526,6 +2526,8 @@
     "emailPlaceholder": "name@company.com",
     "emailForRepliesHint": "At most a short email when the studio replies to your comments. Unsubscribe any time via the link.",
     "emailInvalid": "Please enter a valid email address.",
-    "repliesTo": "replies to {email}"
+    "repliesTo": "replies to {email}",
+    "basedOn": "based on",
+    "sourceCode": "Source code"
   }
 }

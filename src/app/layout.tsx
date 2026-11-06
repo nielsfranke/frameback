@@ -51,14 +51,14 @@ export async function generateMetadata(): Promise<Metadata> {
       }
 
   return {
-    title: "ViTransfer",
+    title: "Frameback",
     description: "Professional video review and approval platform",
     manifest: '/manifest.json',
     icons,
     appleWebApp: {
       capable: true,
       statusBarStyle: 'black-translucent',
-      title: 'ViTransfer',
+      title: 'Frameback',
     },
   }
 }

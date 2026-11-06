@@ -63,13 +63,13 @@
     "noResults": "Keine Ergebnisse gefunden",
     "confirmDelete": "Bist du sicher? Diese Aktion kann nicht rückgängig gemacht werden.",
     "unsavedChanges": "Du hast ungespeicherte Änderungen",
-    "poweredBy": "Powered by ViTransfer",
+    "poweredBy": "Powered by Frameback",
     "pageOf": "Seite {page} von {pages}",
     "select": "Auswählen",
     "selectAll": "Alle auswählen",
     "deselectAll": "Alle abwählen",
     "today": "Heute",
-    "viTransfer": "ViTransfer",
+    "viTransfer": "Frameback",
     "videoReviewTagline": "Video Review, Feedback & Lieferung",
     "changing": "Wird geändert..."
   },
@@ -209,7 +209,7 @@
     "users": "Benutzer",
     "settings": "Einstellungen",
     "security": "Sicherheit",
-    "aboutViTransfer": "Über ViTransfer",
+    "aboutViTransfer": "Über Frameback",
     "about": "Über",
     "aboutDescription": "Open-Source-Plattform für Video-Review und Freigabe für kreative Profis.",
     "website": "vitransfer.com",
@@ -1509,7 +1509,7 @@
       "changingNotificationProviderNotSupported": "Benachrichtigungsanbieter kann nicht geändert werden. Stattdessen ein neues Ziel erstellen.",
       "failedToUpdateNotificationDestination": "Benachrichtigungsziel konnte nicht aktualisiert werden",
       "failedToDeleteNotificationDestination": "Benachrichtigungsziel konnte nicht gelöscht werden",
-      "testNotificationTitle": "ViTransfer Test-Benachrichtigung",
+      "testNotificationTitle": "Frameback Test-Benachrichtigung",
       "testNotificationBody": "Falls du dies erhalten hast, ist dein externes Benachrichtigungsziel korrekt konfiguriert.",
       "failedToQueueTestNotification": "Test-Benachrichtigung konnte nicht in die Warteschlange gestellt werden",
       "failedToFetchNotificationLogs": "Benachrichtigungsprotokolle konnten nicht abgerufen werden",
@@ -1974,7 +1974,7 @@
 
   "device": {
     "authorizeTitle": "Workflow-Integration autorisieren",
-    "authorizeDescription": "Workflow-Integration mit ViTransfer verbinden",
+    "authorizeDescription": "Workflow-Integration mit Frameback verbinden",
     "signInTitle": "Anmelden",
     "signInDescription": "Authentifizieren, um die Workflow-Integration zu autorisieren",
     "authorizeDevice": "Gerät autorisieren",
@@ -2600,6 +2600,8 @@
     "emailPlaceholder": "name@firma.ch",
     "emailForRepliesHint": "Du bekommst höchstens eine kurze Mail, wenn das Studio auf deine Kommentare antwortet. Abmelden jederzeit per Link.",
     "emailInvalid": "Bitte eine gültige E-Mail-Adresse eingeben.",
-    "repliesTo": "Antworten an {email}"
+    "repliesTo": "Antworten an {email}",
+    "basedOn": "basiert auf",
+    "sourceCode": "Quellcode"
   }
 }

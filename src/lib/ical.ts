@@ -41,10 +41,10 @@ export function generateICalFeed(projects: CalendarProject[], domain: string): s
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//ViTransfer//Calendar//EN',
+    'PRODID:-//Frameback//Calendar//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:ViTransfer Deadlines',
+    'X-WR-CALNAME:Frameback Deadlines',
     ...events,
     'END:VCALENDAR',
   ].join('\r\n')

@@ -63,13 +63,13 @@
     "noResults": "No results found",
     "confirmDelete": "Are you sure? This action cannot be undone.",
     "unsavedChanges": "You have unsaved changes",
-    "poweredBy": "Powered by ViTransfer",
+    "poweredBy": "Powered by Frameback",
     "pageOf": "Page {page} of {pages}",
     "select": "Select",
     "selectAll": "Select All",
     "deselectAll": "Deselect All",
     "today": "Today",
-    "viTransfer": "ViTransfer",
+    "viTransfer": "Frameback",
     "videoReviewTagline": "Video Review, Feedback & Deliverables",
     "changing": "Changing..."
   },
@@ -209,7 +209,7 @@
     "users": "Users",
     "settings": "Settings",
     "security": "Security",
-    "aboutViTransfer": "About ViTransfer",
+    "aboutViTransfer": "About Frameback",
     "about": "About",
     "aboutDescription": "Open-source video review and approval platform for creative professionals.",
     "website": "vitransfer.com",
@@ -1509,7 +1509,7 @@
       "changingNotificationProviderNotSupported": "Changing notification provider is not supported. Create a new destination instead.",
       "failedToUpdateNotificationDestination": "Failed to update notification destination",
       "failedToDeleteNotificationDestination": "Failed to delete notification destination",
-      "testNotificationTitle": "ViTransfer Test Notification",
+      "testNotificationTitle": "Frameback Test Notification",
       "testNotificationBody": "If you received this, your external notification destination is configured correctly.",
       "failedToQueueTestNotification": "Failed to queue test notification",
       "failedToFetchNotificationLogs": "Failed to fetch notification logs",
@@ -1974,7 +1974,7 @@
 
   "device": {
     "authorizeTitle": "Authorize Workflow Integration",
-    "authorizeDescription": "Connect your workflow integration to ViTransfer",
+    "authorizeDescription": "Connect your workflow integration to Frameback",
     "signInTitle": "Sign In",
     "signInDescription": "Authenticate to authorize the workflow integration",
     "authorizeDevice": "Authorize Device",
@@ -2601,6 +2601,8 @@
     "emailPlaceholder": "name@company.com",
     "emailForRepliesHint": "At most a short email when the studio replies to your comments. Unsubscribe any time via the link.",
     "emailInvalid": "Please enter a valid email address.",
-    "repliesTo": "replies to {email}"
+    "repliesTo": "replies to {email}",
+    "basedOn": "based on",
+    "sourceCode": "Source code"
   }
 }

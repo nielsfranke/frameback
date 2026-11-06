@@ -22,6 +22,7 @@ import LanguageToggle from '@/components/LanguageToggle'
 import DOMPurify from 'isomorphic-dompurify'
 import { secondsToTimecode, timecodeToSeconds } from '@/lib/timecode'
 import Player, { type Marker, type PlayerHandle } from './Player'
+import { APP_NAME, SOURCE_CODE_URL, UPSTREAM_NAME, UPSTREAM_URL } from '@/lib/app-brand'
 import {
   authHeaders, formatSeconds, initials, loadVideoUrls, newIdempotencyKey, posterUrl,
   type ShareComment, type ShareVideo, type VideoUrls,
@@ -599,6 +600,12 @@ export default function FramebackShareView({
           )}
 
           {statusLine()}
+
+          {/* AGPL-3.0: offer the source of this modified version to every user */}
+          <footer className="mt-auto pt-6 text-center text-[11px] text-muted-foreground">
+            {APP_NAME} · {t('basedOn')} <a href={UPSTREAM_URL} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">{UPSTREAM_NAME}</a>
+            {' · '}<a href={SOURCE_CODE_URL} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">{t('sourceCode')}</a> (AGPL-3.0)
+          </footer>
 
           {showDecisionBar && (
             <div className="fb-decision fixed inset-x-0 bottom-0 z-50 flex flex-wrap items-center gap-3 rounded-t-2xl border bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl md:static md:rounded-xl md:p-4 md:shadow-none">

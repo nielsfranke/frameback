@@ -86,7 +86,7 @@ export async function sendPortalMagicLinkEmail(params: {
   magicLinkUrl: string
 }): Promise<void> {
   const settings = await getEmailSettings()
-  const companyName = settings.companyName || 'ViTransfer'
+  const companyName = settings.companyName || 'Frameback'
   const brand = getEmailBrand(settings.accentColor)
   const brandingLogoUrl = buildBrandingLogoUrl(settings)
   const locale = await getRecipientLocale(params.email).catch(() => settings.language || 'en')

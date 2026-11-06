@@ -13,7 +13,7 @@ import { logError, logMessage } from '../lib/logging'
 export async function processAdminNotifications() {
   try {
     const emailSettings = await getEmailSettings()
-    const companyName = emailSettings.companyName || 'ViTransfer'
+    const companyName = emailSettings.companyName || 'Frameback'
 
     // Get admin notification settings
     const settings = await prisma.settings.findUnique({

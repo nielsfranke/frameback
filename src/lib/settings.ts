@@ -407,7 +407,7 @@ export async function getWebAuthnConfig(): Promise<{
 
     return {
       rpID,
-      rpName: settings.companyName || 'ViTransfer',
+      rpName: settings.companyName || 'Frameback',
       origins,
     }
   } catch (error) {

@@ -32,6 +32,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Install ffmpeg (frame thumbnail tests decode a real video)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
       - run: npm ci --legacy-peer-deps
       - run: npx prisma generate
       - name: Apply migrations (incl. Frameback backfill) to an empty database

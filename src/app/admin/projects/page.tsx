@@ -17,6 +17,8 @@ import ProjectsSavedViews, { type SavedView } from '@/components/projects/Projec
 import { apiFetch, apiPost } from '@/lib/api-client'
 import { logError } from '@/lib/logging'
 import { useTranslations } from 'next-intl'
+import { useFeatures } from '@/components/FeaturesProvider'
+import StudioOverview from '@/components/studio/StudioOverview'
 import { SharePasswordRequirements } from '@/components/SharePasswordRequirements'
 import { ClientSelector } from '@/components/ClientSelector'
 import { generateSecurePassword } from '@/lib/password-utils'
@@ -67,7 +69,12 @@ function loadInitialViewMode(): ViewMode {
   return 'grid'
 }
 
-export default function AdminPage() {
+export default function ProjectsPage() {
+  const { studioV2 } = useFeatures()
+  return studioV2 ? <StudioOverview /> : <LegacyProjectsPage />
+}
+
+function LegacyProjectsPage() {
   const t = useTranslations('projects')
   const tc = useTranslations('common')
   const router = useRouter()

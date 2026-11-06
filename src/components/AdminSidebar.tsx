@@ -12,6 +12,8 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api-client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useTranslations } from 'next-intl'
+import { useFeatures } from '@/components/FeaturesProvider'
+import StudioNav from '@/components/studio/StudioNav'
 
 const COLLAPSED_KEY = 'adminSidebarCollapsed'
 
@@ -121,6 +123,7 @@ export default function AdminSidebar() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const t = useTranslations('nav')
   const ta = useTranslations('auth')
+  const { studioV2 } = useFeatures()
 
   useEffect(() => {
     async function fetchSecuritySettings() {
@@ -225,7 +228,10 @@ export default function AdminSidebar() {
       )}
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-        {navLinks.map((link) => {
+        {studioV2 && showLabels && (
+          <StudioNav projectsLabel={t('projects')} projectsIcon={<FolderKanban className="h-5 w-5 shrink-0" />} />
+        )}
+        {navLinks.filter((link) => !(studioV2 && showLabels && link.href === '/admin/projects')).map((link) => {
           const Icon = link.icon
           const isActive = pathname === link.href || (link.href !== '/admin/projects' && pathname?.startsWith(link.href))
 

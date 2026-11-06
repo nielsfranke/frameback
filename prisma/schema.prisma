@@ -26,6 +26,10 @@ model User {
   pushSubscriptions PushSubscription[]
   calendarToken     CalendarToken?
   savedViews        AdminSavedView[]
+
+  // Frameback: client comments older than this count as read (set at introduction)
+  feedbackSeenBaseline DateTime @default(now())
+  commentsSeen         StudioCommentSeen[]
 }
 
 // Saved filter/sort presets for the admin Projects Dashboard.
@@ -118,6 +122,12 @@ model Project {
   clientCompanyId String?
   clientCompany   ClientCompany? @relation(fields: [clientCompanyId], references: [id], onDelete: SetNull)
 
+  // Frameback: studio-only organisation (clients never see folders)
+  folderId        String?
+  folder          Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  folderChangedAt DateTime?
+  folderMoves     FolderMoveItem[]
+
   videos            Video[]
   comments          Comment[]
   securityEvents    SecurityEvent[]
@@ -131,6 +141,7 @@ model Project {
   replyMailOptOuts  ReplyMailOptOut[] // Frameback: unsubscribed reply-mail addresses
 
   @@index([clientCompanyId])
+  @@index([folderId])
 }
 
 enum ProjectStatus {
@@ -508,6 +519,7 @@ model Comment {
   @@index([videoId])
   @@index([parentId])
   @@index([userId])
+  seenBy       StudioCommentSeen[]
 }
 
 model NotificationQueue {
@@ -923,4 +935,54 @@ model ClientContact {
 
   @@index([companyId])
   @@index([email])
+}
+
+
+/// Frameback: studio-only folders. One level for now (CHECK parentId IS NULL).
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Folder[] @relation("FolderTree")
+  sortOrder Int      @default(0)
+  projects  Project[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+}
+
+/// Frameback: one "move projects" action, so it can be undone safely.
+model FolderMoveBatch {
+  id               String           @id @default(cuid())
+  createdAt        DateTime         @default(now())
+  undoneAt         DateTime?
+  createdFolderIds String[]
+  actorUserId      String?
+  items            FolderMoveItem[]
+}
+
+model FolderMoveItem {
+  batchId      String
+  batch        FolderMoveBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  projectId    String
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  prevFolderId String?
+  newFolderId  String?
+
+  @@id([batchId, projectId])
+  @@index([projectId])
+}
+
+/// Frameback: which client comments a studio user has seen ("n neu").
+model StudioCommentSeen {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  seenAt    DateTime @default(now())
+
+  @@id([userId, commentId])
+  @@index([commentId])
 }

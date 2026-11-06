@@ -17,10 +17,17 @@ REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 LIVE_DIR="${LIVE_DIR:-~/vitransfer}"
 PROD_DIR="${PROD_DIR:-~/frameback}"
 ENV_FILE="$PROD_DIR/.env"
-LIVE_ENV="$LIVE_DIR/.env"
-LIVE_APP=vitransfer-app LIVE_WORKER=vitransfer-worker LIVE_PG=vitransfer-postgres LIVE_REDIS=vitransfer-redis
-LIVE_UPLOADS=vitransfer_uploads
-PROD_PROJECT=frameback REH_PROJECT=frameback-rehearsal
+# Overridable for the tooling's own tests (e.g. staging as stand-in for live, see docs)
+LIVE_APP="${LIVE_APP:-vitransfer-app}" LIVE_WORKER="${LIVE_WORKER:-vitransfer-worker}"
+LIVE_PG="${LIVE_PG:-vitransfer-postgres}" LIVE_REDIS="${LIVE_REDIS:-vitransfer-redis}"
+LIVE_UPLOADS="${LIVE_UPLOADS:-vitransfer_uploads}"
+LIVE_ENV="${LIVE_ENV:-$LIVE_DIR/.env}"
+PROD_PROJECT="${PROD_PROJECT:-frameback}" REH_PROJECT=frameback-rehearsal
+CHECK_PORT="${CHECK_PORT:-4328}"
+# Where the OLD stack answers after a restore (live: the same public port)
+OLD_HEALTH_URL="${OLD_HEALTH_URL:-}"
+# Test hook: FAIL_AT=<step> forces a failure at that step to exercise the recovery path
+fail_at() { [[ "${FAIL_AT:-}" == "$1" ]] && { echo "!! FAIL_AT=$1 (test)" >&2; return 1; } || return 0; }
 STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUPS="$PROD_DIR/backups"
 T0=$(date +%s)
@@ -30,6 +37,17 @@ die()  { echo "ERROR: $*" >&2; exit 1; }
 envval() { grep -E "^$1=" "$2" | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 prod()  { docker compose -p "$PROD_PROJECT" --env-file "$ENV_FILE" -f "$REPO_DIR/deploy/prod/docker-compose.yml" "$@"; }
 reh()   { docker compose -p "$REH_PROJECT" --env-file "$ENV_FILE" -f "$REPO_DIR/deploy/prod/docker-compose.yml" -f "$REPO_DIR/deploy/prod/rehearsal.override.yml" "$@"; }
+# 0 = some Frameback app/worker container is running/restarting (or state unknown), 1 = all stopped
+frameback_active() {
+  local ids id st
+  ids=$(prod ps -a -q app worker 2>/dev/null) || return 0
+  for id in $ids; do
+    st=$(docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null) || return 0
+    [[ "$st" == running || "$st" == restarting ]] && return 0
+  done
+  return 1
+}
+policy_of() { docker inspect -f '{{.HostConfig.RestartPolicy.Name}}{{if gt .HostConfig.RestartPolicy.MaximumRetryCount 0}}:{{.HostConfig.RestartPolicy.MaximumRetryCount}}{{end}}' "$1"; }
 need_yes() { [[ " $* " == *" --yes "* ]] || die "refusing without --yes"; }
 
 restore_dump() { # $1 = compose function name, $2 = dump file
@@ -56,7 +74,7 @@ dump_live() { # $1 = target file
 
 wait_healthy() { # $1 = url
   for _ in $(seq 1 90); do
-    [[ "$(curl -s -o /dev/null -w '%{http_code}' "$1/api/health")" == 200 ]] && return 0
+    [[ "$(curl -s --connect-timeout 2 --max-time 5 -o /dev/null -w '%{http_code}' "$1/api/health")" == 200 ]] && return 0
     sleep 4
   done
   return 1
@@ -137,69 +155,141 @@ PY
 
   go)
     need_yes "$@"
+    exec 9>"$PROD_DIR/.cutover.lock"; flock -n 9 || die "another cutover/rollback is running"
     [[ -f "$ENV_FILE" ]] || die "run init-env first"
     IMAGE="$(envval FRAMEBACK_IMAGE "$ENV_FILE")"
-    docker image inspect "$IMAGE" >/dev/null || die "image $IMAGE missing"
+    docker image inspect "$IMAGE" postgres:16-alpine redis:7-alpine alpine:3 >/dev/null || die "images missing (pull/build first)"
     docker inspect -f '{{.State.Running}}' "$LIVE_APP" | grep -q true || die "live app is not running – nothing to cut over?"
-    [[ -z "$(prod ps -q app 2>/dev/null)" ]] || die "frameback app already exists – use rollback first"
+    # Never overwrite an existing Frameback installation (running OR stopped, or its DB volume)
+    [[ -z "$(prod ps -a -q 2>/dev/null)" ]] || die "frameback containers exist – inspect / remove them deliberately first"
+    docker volume inspect "${PROD_PROJECT}_postgres-data" >/dev/null 2>&1 && die "volume ${PROD_PROJECT}_postgres-data exists – refusing to overwrite"
+    prod config -q || die "compose config invalid"
     LIVE_REDIS_PW="$(envval REDIS_PASSWORD "$LIVE_ENV")"
+    PROD_REDIS_PW="$(envval REDIS_PASSWORD "$ENV_FILE")"
+    PUBLIC_PORT="$(envval APP_PORT "$ENV_FILE")"; PUBLIC_PORT="${PUBLIC_PORT:-4324}"
+    umask 077
+
+    # Tool image for the delta sync, built BEFORE the downtime (no downloads while offline)
+    docker image inspect frameback-rsync:local >/dev/null 2>&1 || \
+      printf 'FROM alpine:3\nRUN apk add --no-cache rsync\n' | docker build -q -t frameback-rsync:local - >/dev/null
+    # Remember the live restart policies (incl. retry counts) and run states for an exact restore
+    POL_APP=$(policy_of "$LIVE_APP"); POL_WORKER=$(policy_of "$LIVE_WORKER")
+    WORKER_WAS_RUNNING=$(docker inspect -f '{{.State.Running}}' "$LIVE_WORKER")
+    printf 'POL_APP=%q\nPOL_WORKER=%q\nWORKER_WAS_RUNNING=%q\n' "$POL_APP" "$POL_WORKER" "$WORKER_WAS_RUNNING" > "$PROD_DIR/.live-restart-policies"
+    # Check port free, enough disk for a full uploads copy (+10 %)
+    ! ss -ltn "sport = :$CHECK_PORT" | grep -q LISTEN || die "port $CHECK_PORT busy"
+    NEED_KB=$(docker run --rm -v "$LIVE_UPLOADS":/u:ro alpine:3 du -sk /u | cut -f1)
+    FREE_KB=$(df -k --output=avail /var/lib/docker | tail -1)
+    (( FREE_KB > NEED_KB * 11 / 10 )) || die "not enough disk space for the uploads copy"
 
     log "Pre-seed uploads while live still runs"
     copy_uploads "${PROD_PROJECT}_uploads" full
 
-    log "DOWNTIME START – stop live app"
-    docker stop "$LIVE_APP" >/dev/null
-    log "Wait for live worker queues to drain (max 5 min)"
+    # From here on ANY non-zero exit (die, a failed command, Ctrl-C) restores the old stack –
+    # until Frameback is published. An EXIT trap is used (not ERR), so subshells and
+    # functions cannot trigger the recovery twice.
+    PHASE=down
+    restore_live() {
+      echo "!! aborting (phase $PHASE) – restoring the old stack" >&2
+      prod stop -t 30 app worker >/dev/null 2>&1 || true
+      if frameback_active; then
+        echo "!! Frameback app/worker still running (or state unknown) – NOT starting the old stack (port conflict). Fix manually, then: $0 rollback --yes" >&2
+        return
+      fi
+      for id in $(prod ps -a -q app worker 2>/dev/null); do docker update --restart=no "$id" >/dev/null 2>&1 || true; done
+      docker update --restart="$POL_APP" "$LIVE_APP" >/dev/null; docker update --restart="$POL_WORKER" "$LIVE_WORKER" >/dev/null
+      [[ "$WORKER_WAS_RUNNING" == true ]] && docker start "$LIVE_WORKER" >/dev/null
+      docker start "$LIVE_APP" >/dev/null
+      if wait_healthy "${OLD_HEALTH_URL:-http://127.0.0.1:$PUBLIC_PORT}"; then echo "!! old stack is answering again" >&2
+      else echo "!! old stack started but not healthy yet – check: docker logs $LIVE_APP" >&2; fi
+    }
+    on_exit() { local rc=$?; if (( rc != 0 )) && [[ "$PHASE" != public ]]; then restore_live; fi; exit "$rc"; }
+    trap on_exit EXIT
+    trap 'exit 130' INT TERM
+
+    log "DOWNTIME START – stop live app (no new uploads/comments)"
+    docker update --restart=no "$LIVE_APP" "$LIVE_WORKER" >/dev/null
+    docker stop -t 30 "$LIVE_APP" >/dev/null
+
+    log "Drain live queues: waiting/active must reach 0 (max 5 min), else abort"
+    drained=no
     for _ in $(seq 1 60); do
-      ACTIVE=$(docker exec "$LIVE_REDIS" sh -c "redis-cli --no-auth-warning -a '$LIVE_REDIS_PW' --scan --pattern 'bull:*:active' | xargs -r -n1 redis-cli --no-auth-warning -a '$LIVE_REDIS_PW' llen | awk '{s+=\$1} END {print s+0}'")
-      [[ "$ACTIVE" == 0 ]] && break
-      echo "active jobs: $ACTIVE"; sleep 5
+      COUNTS=$(docker exec -e REDISCLI_AUTH="$LIVE_REDIS_PW" "$LIVE_REDIS" sh -ec '
+        redis-cli ping | grep -q PONG
+        busy=0; delayed=0; repeat=0
+        for k in $(redis-cli --scan --pattern "bull:*"); do
+          case "$k" in
+            *:wait|*:active|*:paused) busy=$((busy + $(redis-cli llen "$k"))) ;;
+            *:prioritized) busy=$((busy + $(redis-cli zcard "$k"))) ;;
+            *:delayed) delayed=$((delayed + $(redis-cli zcard "$k"))) ;;
+            *:repeat) repeat=$((repeat + $(redis-cli zcard "$k"))) ;;
+          esac
+        done
+        echo "$busy $delayed $repeat"') || die "cannot read live queues"
+      [[ "$COUNTS" =~ ^[0-9]+\ [0-9]+\ [0-9]+$ ]] || die "unexpected queue counts: $COUNTS"
+      read -r BUSY DELAYED REPEAT <<<"$COUNTS"
+      # delayed entries beyond the repeat schedules are real jobs waiting to run
+      if [[ "$BUSY" == 0 && "$DELAYED" -le "$REPEAT" ]]; then drained=yes; break; fi
+      echo "queues busy=$BUSY delayed=$DELAYED (repeat schedules=$REPEAT)"; sleep 5
     done
-    docker stop "$LIVE_WORKER" >/dev/null
+    [[ "$drained" == yes ]] || die "live queues did not drain – aborting cutover"
+    docker stop -t 60 "$LIVE_WORKER" >/dev/null
+    fail_at after_stop
 
     log "Final dump of live"
     DUMP="$BACKUPS/cutover-$STAMP.dump"; dump_live "$DUMP"
     log "Uploads delta"
-    copy_uploads "${PROD_PROJECT}_uploads" delta
+    docker run --rm -v "$LIVE_UPLOADS":/from:ro -v "${PROD_PROJECT}_uploads":/to frameback-rsync:local \
+      sh -c 'rsync -a --delete /from/ /to/ && du -sh /to'
 
     log "Frameback database"
-    prod up -d --wait postgres redis
-    restore_dump prod "$DUMP"
-    prod exec -T redis sh -c "redis-cli --no-auth-warning -a '$(envval REDIS_PASSWORD "$ENV_FILE")' FLUSHALL" >/dev/null
+    PHASE=new
+    prod up -d --wait --wait-timeout 180 postgres redis
+    prod exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -qc "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"'
+    prod exec -T postgres sh -c 'pg_restore --exit-on-error --no-owner --no-privileges -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$DUMP"
+    [[ "$(prod exec -T -e REDISCLI_AUTH="$PROD_REDIS_PW" redis redis-cli FLUSHALL | tr -d '\r')" == OK ]] || die "redis flush failed"
 
-    rollback_now() {
-      echo "!! checks failed – rolling back to the old stack" >&2
-      prod stop app worker || true
-      docker start "$LIVE_WORKER" "$LIVE_APP" >/dev/null
-      echo "!! old stack running again on 4324. Frameback containers kept for inspection." >&2
-      exit 1
-    }
-    log "Start Frameback app (migrations) on 4324 + worker"
-    prod up -d app || rollback_now
-    wait_healthy "http://127.0.0.1:$(envval APP_PORT "$ENV_FILE")" || rollback_now
-    prod up -d worker || rollback_now
-    log "DOWNTIME END (app answering)"
-
+    log "Start Frameback app on 127.0.0.1:$CHECK_PORT only (not public, no worker) for the checks"
+    APP_PORT="127.0.0.1:$CHECK_PORT" prod up -d --no-deps app
+    wait_healthy "http://127.0.0.1:$CHECK_PORT" || die "frameback app not healthy"
+    fail_at before_checks
     log "Check report"
-    PROJECT="$PROD_PROJECT" ENV_FILE="$ENV_FILE" REPORT_MODE=production \
+    LIVE_PG_CONTAINER="$LIVE_PG" PROJECT="$PROD_PROJECT" ENV_FILE="$ENV_FILE" REPORT_MODE=production \
       COMPOSE_ARGS="-f $REPO_DIR/deploy/prod/docker-compose.yml" \
-      "$REPO_DIR/scripts/staging/report.sh" || rollback_now
+      "$REPO_DIR/scripts/staging/report.sh"
     log "Smoke tests"
-    smoke "http://127.0.0.1:$(envval APP_PORT "$ENV_FILE")" || rollback_now
+    smoke "http://127.0.0.1:$CHECK_PORT"
 
-    # Old containers must not come back after a reboot; they stay for 14 days as fallback
-    docker update --restart=no "$LIVE_APP" "$LIVE_WORKER" >/dev/null
-    log "Cutover complete. Live dump kept at $DUMP. Old stack stopped (not removed)."
+    log "Go public on port $PUBLIC_PORT, start worker"
+    # From the moment the port is public clients may write: no automatic rollback any more
+    PHASE=public
+    trap - EXIT INT TERM
+    APP_PORT="$PUBLIC_PORT" prod up -d --no-deps app
+    if ! wait_healthy "http://127.0.0.1:$PUBLIC_PORT"; then
+      echo "!! Frameback is not answering on $PUBLIC_PORT. Check: docker compose -p $PROD_PROJECT logs app" >&2
+      echo "!! To return to the old stack: $0 rollback --yes" >&2
+      exit 1
+    fi
+    prod up -d --no-deps worker
+    log "DOWNTIME END – Frameback is live. Live dump: $DUMP. Old stack stopped (restart=no), not removed."
+    echo "From now on clients write into Frameback: no automatic rollback. Manual: $0 rollback --yes (loses changes since now)."
     ;;
 
   rollback)
     need_yes "$@"
-    echo "Rolling back: Frameback app/worker stop, old ViTransfer app/worker start."
+    exec 9>"$PROD_DIR/.cutover.lock"; flock -n 9 || die "another cutover/rollback is running"
+    echo "Rolling back: stop Frameback app/worker, start old ViTransfer app/worker."
     echo "Comments/decisions made in Frameback since the cutover are NOT carried back."
-    prod stop app worker || true
-    docker update --restart=unless-stopped "$LIVE_APP" "$LIVE_WORKER" >/dev/null
-    docker start "$LIVE_WORKER" "$LIVE_APP" >/dev/null
-    log "Old stack running on 4324 again"
+    prod stop -t 30 app worker
+    ! frameback_active || die "Frameback app/worker still running (or state unknown) – not starting the old stack"
+    for id in $(prod ps -a -q app worker); do docker update --restart=no "$id" >/dev/null; done
+    POL_APP=unless-stopped POL_WORKER=unless-stopped WORKER_WAS_RUNNING=true
+    [[ -f "$PROD_DIR/.live-restart-policies" ]] && source "$PROD_DIR/.live-restart-policies"
+    docker update --restart="$POL_APP" "$LIVE_APP" >/dev/null; docker update --restart="$POL_WORKER" "$LIVE_WORKER" >/dev/null
+    [[ "$WORKER_WAS_RUNNING" == true ]] && docker start "$LIVE_WORKER" >/dev/null
+    docker start "$LIVE_APP" >/dev/null
+    wait_healthy "${OLD_HEALTH_URL:-http://127.0.0.1:4324}" || die "old app started but not healthy – check docker logs $LIVE_APP"
+    log "Old stack running again"
     ;;
 
   *)

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useFormatter, useNow, useTranslations } from 'next-intl'
 import DOMPurify from 'isomorphic-dompurify'
-import { AlertTriangle, Check, ChevronDown, ChevronLeft, Clock, CornerUpLeft, Loader2, RotateCcw, Send, Upload } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, Clock, CornerUpLeft, ImageIcon, Loader2, RotateCcw, Send, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import Player, { type Marker, type PlayerHandle } from '@/components/frameback-share/Player'
@@ -71,6 +71,8 @@ export default function StudioReview({ projectId }: { projectId: string }) {
   const [picker, setPicker] = useState<'video' | 'version' | null>(null)
   const [sending, setSending] = useState<Group | null>(null)
   const [newVersion, setNewVersion] = useState<Group | null>(null)
+  const [grabbing, setGrabbing] = useState(false)
+  const [posterRev, setPosterRev] = useState(0)
 
   const loadProject = useCallback(async () => {
     const r = await apiFetch(`/api/projects/${projectId}`)
@@ -125,7 +127,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
       if (!cancelled) setUrls({ stream, poster })
     })()
     return () => { cancelled = true }
-  }, [video?.id, projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [video?.id, projectId, posterRev]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const threads = useMemo(() => comments
     .filter((c) => c.videoId === video?.id && !c.parentId && !c.deleted)
@@ -357,7 +359,24 @@ export default function StudioReview({ projectId }: { projectId: string }) {
           ) : (
             <div className="grid aspect-video place-items-center rounded-xl bg-black/90 text-white/70"><Loader2 className="h-6 w-6 animate-spin" /></div>
           )}
-          {video?.versionNote && <p className="mt-3 text-sm"><b>{t('newIn', { version: `v${video.version}` })}</b> {video.versionNote}</p>}
+          <div className="mt-3 flex flex-wrap items-start gap-3">
+            {video?.versionNote ? <p className="min-w-[220px] flex-1 text-sm"><b>{t('newIn', { version: `v${video.version}` })}</b> {video.versionNote}</p> : <span className="flex-1" />}
+            {video && (
+              <Button size="sm" variant="outline" disabled={grabbing} onClick={async () => {
+                const at = player.current?.currentTime() ?? 0
+                player.current?.pause()
+                setGrabbing(true)
+                try {
+                  await apiPost(`/api/videos/${video.id}/thumbnail`, { seconds: at })
+                  toast(t('thumbnailSet', { time: formatSeconds(at), version: `v${video.version}` }))
+                  setPosterRev((r) => r + 1)
+                  void reloadOverview()
+                } catch { toast(t('thumbnailFailed')) } finally { setGrabbing(false) }
+              }}>
+                {grabbing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-1.5 h-4 w-4" />}{t('useFrameAsThumbnail')}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

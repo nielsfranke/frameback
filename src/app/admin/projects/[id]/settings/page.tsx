@@ -32,6 +32,7 @@ interface Project {
   companyName: string | null
   clientCompanyId: string | null
   enableRevisions: boolean
+  reviewFlow?: boolean
   maxRevisions: number
   restrictCommentsToLatestVersion: boolean
   hideFeedback: boolean
@@ -69,6 +70,7 @@ export default function ProjectSettingsPage() {
   const params = useParams()
   const router = useRouter()
   const t = useTranslations('projects')
+  const tr = useTranslations('review')
   const tc = useTranslations('common')
   const projectId = params?.id as string
 
@@ -84,6 +86,7 @@ export default function ProjectSettingsPage() {
   const [companyName, setCompanyName] = useState('')
   const [clientCompanyId, setClientCompanyId] = useState<string | null>(null)
   const [enableRevisions, setEnableRevisions] = useState(false)
+  const [reviewFlow, setReviewFlow] = useState(false)
   const [maxRevisions, setMaxRevisions] = useState<number | ''>('')
   const [restrictCommentsToLatestVersion, setRestrictCommentsToLatestVersion] = useState(false)
   const [hideFeedback, setHideFeedback] = useState(false)
@@ -178,6 +181,7 @@ export default function ProjectSettingsPage() {
         setCompanyName(data.companyName || '')
         setClientCompanyId(data.clientCompanyId || null)
         setEnableRevisions(data.enableRevisions)
+        setReviewFlow(!!data.reviewFlow)
         setMaxRevisions(data.maxRevisions)
         setRestrictCommentsToLatestVersion(data.restrictCommentsToLatestVersion)
         setHideFeedback(data.hideFeedback || false)
@@ -294,6 +298,7 @@ export default function ProjectSettingsPage() {
         companyName: companyName || null,
         clientCompanyId: clientCompanyId || null,
         enableRevisions,
+        reviewFlow,
         maxRevisions: enableRevisions ? finalMaxRevisions : 0,
         restrictCommentsToLatestVersion,
         hideFeedback,
@@ -579,6 +584,16 @@ export default function ProjectSettingsPage() {
 	                  </p>
 	                </div>
 	              </div>
+
+              <div className="space-y-3 border p-4 rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5 flex-1">
+                    <Label htmlFor="reviewFlow">{tr('projectSettingLabel')}</Label>
+                    <p className="text-xs text-muted-foreground">{reviewFlow ? tr('projectSettingOn') : tr('projectSettingOff')}</p>
+                  </div>
+                  <Switch id="reviewFlow" checked={reviewFlow} onCheckedChange={setReviewFlow} />
+                </div>
+              </div>
 
               <div className="space-y-3 border p-4 rounded-lg bg-muted/30">
                 <div className="flex items-center justify-between gap-4">

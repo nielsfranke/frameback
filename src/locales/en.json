@@ -2466,6 +2466,13 @@
     "defaultDisclosureText": "This platform logs access activity including your IP address and browser information for security and functionality purposes. Your session is tracked using local browser storage (no cookies are used). Comments and feedback you provide are stored and shared with the project owner.\n\nThis data is processed based on the legitimate interest of maintaining platform security and enabling the review workflow. For questions about how your data is handled, including requests for access, correction, or deletion, please contact the person who shared this link with you."
   },
   "review": {
+    "projectSettingLabel": "Approval only on request",
+    "projectSettingOn": "Clients can only approve versions you sent for approval.",
+    "projectSettingOff": "Clients can approve any version at any time.",
+    "defaultLabel": "Approval only on request (default for new projects)",
+    "defaultHint": "Preselected for new projects and changeable per project.",
+    "accessOn": "Approval on request",
+    "accessOff": "Approval any time",
     "state": {
       "DRAFT": "In progress",
       "IN_REVIEW": "Awaiting approval",
@@ -2712,6 +2719,7 @@
     "moveOneTitle": "Move “{title}” to",
     "moveManyTitle": "Move {n} projects to",
     "project": {
+      "approval": "Approval",
       "sentToast": "Sent. The client can now approve or request changes.",
       "sendFailed": "Sending didn't work. Please try again.",
       "sendTitle": "Send {version} of “{name}” for approval",
@@ -2819,6 +2827,9 @@
       }
     },
     "review": {
+      "useFrameAsThumbnail": "Use current frame as thumbnail",
+      "thumbnailSet": "The frame at {time} is now the thumbnail of {version}. It is also saved as a file with the version.",
+      "thumbnailFailed": "Couldn't create the thumbnail. Please try again.",
       "markedDone": "Marked as done",
       "reopened": "Reopened",
       "replySent": "Reply sent",

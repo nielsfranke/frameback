@@ -77,7 +77,6 @@ services:
       # CSRF allowlist in addition to NEXT_PUBLIC_APP_URL (e.g. the HTTPS staging port)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # Frameback feature flags (default off)
-      FEATURE_REVIEW_FLOW: ${FEATURE_REVIEW_FLOW:-false}
       FEATURE_NEW_SHARE: ${FEATURE_NEW_SHARE:-false}
       FEATURE_STUDIO_V2: ${FEATURE_STUDIO_V2:-false}
     volumes:

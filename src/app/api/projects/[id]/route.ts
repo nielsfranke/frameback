@@ -216,6 +216,9 @@ export async function PATCH(
       }
     }
 
+    if (validatedBody.reviewFlow !== undefined) {
+      updateData.reviewFlow = validatedBody.reviewFlow
+    }
     if (validatedBody.enableRevisions !== undefined) {
       updateData.enableRevisions = validatedBody.enableRevisions
     }

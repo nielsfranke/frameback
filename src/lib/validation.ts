@@ -237,6 +237,7 @@ export const createProjectSchema = z.object({
   ]).optional(),
   authMode: z.enum(['PASSWORD', 'OTP', 'BOTH', 'NONE']).optional(),
   enableRevisions: z.boolean().optional(),
+  reviewFlow: z.boolean().optional(),
   maxRevisions: z.number().int().min(1).max(10).optional(),
   restrictCommentsToLatestVersion: z.boolean().optional(),
   dueDate: z.string().datetime().nullable().optional(),
@@ -266,6 +267,7 @@ export const updateProjectSchema = z.object({
 
   // Revision settings
   enableRevisions: z.boolean().optional(),
+  reviewFlow: z.boolean().optional(),
   maxRevisions: z.number().int().min(0).max(50).optional(),
   restrictCommentsToLatestVersion: z.boolean().optional(),
 

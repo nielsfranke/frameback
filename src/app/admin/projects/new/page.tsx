@@ -30,6 +30,12 @@ export default function NewProjectPage() {
   const [folderId, setFolderId] = useState<string>('')
   const [folderTouched, setFolderTouched] = useState(false)
   const clientTouched = useRef(false)
+  // approval flow: preset from the studio default, changeable per project
+  const tr = useTranslations('review')
+  const [reviewFlow, setReviewFlow] = useState(false)
+  useEffect(() => {
+    apiFetch('/api/settings').then((r) => (r.ok ? r.json() : null)).then((s) => { if (s) setReviewFlow(!!s.defaultReviewFlow) }).catch(() => {})
+  }, [])
   const tc = useTranslations('common')
   const [loading, setLoading] = useState(false)
   const [isShareOnly, setIsShareOnly] = useState(false)
@@ -134,6 +140,7 @@ export default function NewProjectPage() {
       isShareOnly: isShareOnlyValue,
       dueDate: dueDate ? `${dueDate}T12:00:00.000Z` : null,
       dueReminder: dueDate ? dueReminder : null,
+      reviewFlow,
     }
 
     try {
@@ -217,6 +224,14 @@ export default function NewProjectPage() {
                   )}
                 </div>
               )}
+
+              <label className="flex items-start justify-between gap-4 rounded-lg border p-4">
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-medium">{tr('projectSettingLabel')}</span>
+                  <span className="block text-xs text-muted-foreground">{reviewFlow ? tr('projectSettingOn') : tr('projectSettingOff')}</span>
+                </span>
+                <input type="checkbox" className="mt-1 h-4 w-4 accent-primary" checked={reviewFlow} onChange={(e) => setReviewFlow(e.target.checked)} />
+              </label>
 
               {/* Due Date */}
               <div className="space-y-3">

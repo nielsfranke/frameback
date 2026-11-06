@@ -287,6 +287,8 @@ export async function GET(
       description: project.description,
 
       ...(isGuest ? {} : { status: project.status }),
+      // Frameback: approval only for versions sent for approval (per project)
+      ...(isGuest ? {} : { reviewFlow: !!project.reviewFlow }),
 
       guestMode: project.guestMode || false,
       isGuest: isGuest,

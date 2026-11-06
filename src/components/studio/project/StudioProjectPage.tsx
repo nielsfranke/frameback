@@ -34,6 +34,7 @@ const chip: Record<Group['state'], string> = {
 export default function StudioProjectPage({ id }: { id: string }) {
   const t = useTranslations('studio.project')
   const ts = useTranslations('studio')
+  const tr = useTranslations('review')
   const format = useFormatter()
   const now = useNow({ updateInterval: 60_000 })
   const router = useRouter()
@@ -222,6 +223,7 @@ export default function StudioProjectPage({ id }: { id: string }) {
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
             {clientLabel && <b className="font-semibold text-foreground">{clientLabel}</b>}
             <span>{project.authMode === 'NONE' ? t('accessOpen') : t('accessProtected')}</span>
+            <Link href={`/admin/projects/${id}/settings`} className="hover:text-foreground hover:underline" title={project.reviewFlow ? tr('projectSettingOn') : tr('projectSettingOff')}>{project.reviewFlow ? tr('accessOn') : tr('accessOff')}</Link>
             {project.dueDate && <span>{ts('due', { date: format.dateTime(new Date(project.dueDate), { day: 'numeric', month: 'short' }) })}</span>}
           </div>
           {summary.total > 0 && (

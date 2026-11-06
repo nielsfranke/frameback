@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { ReviewError, adminOverride, clientDecide, idempotencyKeyFrom, legacyClientApprove } from '@/lib/review'
 import { getCurrentUserFromRequest } from '@/lib/auth'
-import { features } from '@/lib/features'
 import { getClientIpAddress } from '@/lib/utils'
 import { handleApprovalNotification } from '@/lib/notifications'
 import { getAutoApproveProject, isSmtpConfigured } from '@/lib/settings'
@@ -102,7 +101,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Frameback review flow (src/lib/review.ts). All variants lock the version group and
     // keep "one approved version per video" atomically.
     //  - admin:                      override, any version
-    //  - client, FEATURE_REVIEW_FLOW: only the current version that was sent "Zur Freigabe"
+    //  - client, project.reviewFlow: only the current version that was sent "Zur Freigabe"
     //  - client, flag off:           legacy behaviour (any version), but recorded
     const actor = {
       name: authorName || 'Client', // unverified display name
@@ -123,7 +122,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         applied = result.changedApproval
       } else {
         const idempotencyKey = idempotencyKeyFrom(request.headers.get('idempotency-key'))
-        const result = features.reviewFlow
+        // per project: approval only for versions the studio sent for approval
+        const result = project.reviewFlow
           ? await clientDecide({ videoId: selectedVideoId, kind: 'APPROVE', actor, idempotencyKey })
           : await legacyClientApprove({ videoId: selectedVideoId, actor, idempotencyKey })
         applied = result.applied

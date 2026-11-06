@@ -31,11 +31,9 @@ interface SharePageClientProps {
   token: string
   /** Frameback: render the new client view after authentication (FEATURE_NEW_SHARE) */
   newShare?: boolean
-  /** Frameback: clients may only approve versions sent for approval (FEATURE_REVIEW_FLOW) */
-  reviewFlow?: boolean
 }
 
-export default function SharePageClient({ token, newShare = false, reviewFlow = false }: SharePageClientProps) {
+export default function SharePageClient({ token, newShare = false }: SharePageClientProps) {
   const t = useTranslations('share')
   const tc = useTranslations('common')
   const searchParams = useSearchParams()
@@ -1012,7 +1010,7 @@ export default function SharePageClient({ token, newShare = false, reviewFlow = 
           project={project}
           shareToken={shareToken}
           authenticatedName={authenticatedName}
-          reviewFlow={reviewFlow}
+          reviewFlow={!!project.reviewFlow}
           defaultQuality={defaultQuality}
           onRefresh={() => fetchProjectData()}
           onOpenPhotos={project.hasPhotos ? () => setViewState('gallery') : undefined}

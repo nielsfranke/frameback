@@ -149,6 +149,7 @@ export async function POST(request: NextRequest) {
       sharePassword,
       authMode,
       enableRevisions,
+      reviewFlow,
       maxRevisions,
       restrictCommentsToLatestVersion,
       dueDate,
@@ -182,6 +183,7 @@ export async function POST(request: NextRequest) {
       select: {
         defaultPreviewResolution: true,
         defaultSkipTranscoding: true,
+        defaultReviewFlow: true,
         defaultWatermarkEnabled: true,
         defaultWatermarkText: true,
         defaultWatermarkPositions: true,
@@ -216,6 +218,8 @@ export async function POST(request: NextRequest) {
           sharePassword: encryptedSharePassword,
           authMode: resolvedAuthMode,
           enableRevisions: isShareOnly ? false : (enableRevisions || false),
+          // explicit choice in the form, else the studio default
+          reviewFlow: typeof reviewFlow === 'boolean' ? reviewFlow : (settings?.defaultReviewFlow ?? false),
           maxRevisions: isShareOnly ? 0 : (enableRevisions ? (maxRevisions || 3) : 0),
           restrictCommentsToLatestVersion: isShareOnly ? false : (restrictCommentsToLatestVersion || false),
           status: isShareOnly ? 'SHARE_ONLY' : 'IN_REVIEW',

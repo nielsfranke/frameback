@@ -2465,6 +2465,13 @@
     "defaultDisclosureText": "Diese Plattform protokolliert Zugriffsaktivitäten einschließlich Ihrer IP-Adresse und Browser-Informationen zu Sicherheits- und Funktionszwecken. Ihre Sitzung wird über den lokalen Browser-Speicher verfolgt (keine Cookies werden verwendet). Kommentare und Feedback, die Sie hinterlassen, werden gespeichert und mit dem Projektinhaber geteilt.\n\nDiese Daten werden auf der Grundlage des berechtigten Interesses an der Aufrechterhaltung der Plattformsicherheit und der Ermöglichung des Review-Workflows verarbeitet. Bei Fragen zur Verarbeitung Ihrer Daten, einschließlich Anfragen auf Auskunft, Berichtigung oder Löschung, wenden Sie sich bitte an die Person, die Ihnen diesen Link geteilt hat."
   },
   "review": {
+    "projectSettingLabel": "Freigabe nur nach Anfrage",
+    "projectSettingOn": "Kunden können nur Versionen freigeben, die du zur Freigabe gesendet hast.",
+    "projectSettingOff": "Kunden können jede Version jederzeit freigeben.",
+    "defaultLabel": "Freigabe nur nach Anfrage (Standard für neue Projekte)",
+    "defaultHint": "Wird bei neuen Projekten vorausgewählt und lässt sich pro Projekt ändern.",
+    "accessOn": "Freigabe nach Anfrage",
+    "accessOff": "Freigabe jederzeit",
     "state": {
       "DRAFT": "In Arbeit",
       "IN_REVIEW": "Zur Freigabe",
@@ -2711,6 +2718,7 @@
     "moveOneTitle": "„{title}“ verschieben nach",
     "moveManyTitle": "{n} Projekte verschieben nach",
     "project": {
+      "approval": "Freigabe",
       "sentToast": "Gesendet. Der Kunde kann jetzt freigeben oder Änderungen anfordern.",
       "sendFailed": "Senden hat nicht geklappt. Bitte noch einmal versuchen.",
       "sendTitle": "{version} von „{name}“ zur Freigabe senden",
@@ -2818,6 +2826,9 @@
       }
     },
     "review": {
+      "useFrameAsThumbnail": "Aktuelles Bild als Thumbnail",
+      "thumbnailSet": "Bild bei {time} ist jetzt das Thumbnail von {version}. Es liegt auch als Datei bei der Version.",
+      "thumbnailFailed": "Thumbnail konnte nicht erstellt werden. Bitte noch einmal versuchen.",
       "markedDone": "Als erledigt markiert",
       "reopened": "Wieder geöffnet",
       "replySent": "Antwort gesendet",

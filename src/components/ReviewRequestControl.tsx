@@ -3,7 +3,7 @@
 /**
  * Frameback: review state of the current version + "Zur Freigabe senden" / "Zurückziehen".
  * Clients can only approve a version after the studio sent it for approval
- * (enforced server-side in src/lib/review.ts when FEATURE_REVIEW_FLOW is on).
+ * (enforced server-side in src/lib/review.ts when the project has reviewFlow on).
  */
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'

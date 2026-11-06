@@ -119,8 +119,9 @@ export function RenameVideoDialog({ group, onOpenChange, onDone }: { group: Grou
 }
 
 /** "Teilen": link, client view, access and content at a glance; details live in settings. */
-export function SharePopover({ project, shareUrl }: { project: { id: string; authMode?: string; sharePassword?: boolean | string | null; photoOnlyShare?: boolean; guestMode?: boolean }; shareUrl: string }) {
+export function SharePopover({ project, shareUrl }: { project: { id: string; authMode?: string; sharePassword?: boolean | string | null; photoOnlyShare?: boolean; guestMode?: boolean; reviewFlow?: boolean }; shareUrl: string }) {
   const t = useTranslations('studio.project')
+  const tr = useTranslations('review')
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -147,6 +148,7 @@ export function SharePopover({ project, shareUrl }: { project: { id: string; aut
           <dl className="mt-3 divide-y divide-border border-t border-border text-sm">
             <div className="flex justify-between py-2.5"><dt>{t('access')}</dt><dd className="font-semibold">{access}</dd></div>
             <div className="flex justify-between py-2.5"><dt>{t('content')}</dt><dd className="font-semibold">{content}</dd></div>
+            <div className="flex justify-between gap-3 py-2.5"><dt>{t('approval')}</dt><dd className="text-right font-semibold">{project.reviewFlow ? tr('accessOn') : tr('accessOff')}</dd></div>
           </dl>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button asChild variant="outline" className="flex-1"><a href={shareUrl} target="_blank" rel="noopener noreferrer"><Eye className="mr-1.5 h-4 w-4" />{t('viewAsClient')}</a></Button>

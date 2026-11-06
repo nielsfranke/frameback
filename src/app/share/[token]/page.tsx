@@ -23,5 +23,5 @@ export default async function SharePage({ params }: SharePageProps) {
   }
 
   // Frameback: feature flags are read server-side and handed to the client view
-  return <SharePageClient token={token} newShare={features.newShare} reviewFlow={features.reviewFlow} />
+  return <SharePageClient token={token} newShare={features.newShare} />
 }

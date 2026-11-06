@@ -12,6 +12,8 @@ interface VideoProcessingSettingsSectionProps {
   setDefaultPreviewResolution: (value: string) => void
   defaultSkipTranscoding: boolean
   setDefaultSkipTranscoding: (value: boolean) => void
+  defaultReviewFlow: boolean
+  setDefaultReviewFlow: (value: boolean) => void
   defaultWatermarkEnabled: boolean
   setDefaultWatermarkEnabled: (value: boolean) => void
   defaultWatermarkText: string
@@ -34,6 +36,8 @@ export function VideoProcessingSettingsSection({
   setDefaultPreviewResolution,
   defaultSkipTranscoding,
   setDefaultSkipTranscoding,
+  defaultReviewFlow,
+  setDefaultReviewFlow,
   defaultWatermarkEnabled,
   setDefaultWatermarkEnabled,
   defaultWatermarkText,
@@ -51,6 +55,7 @@ export function VideoProcessingSettingsSection({
   collapsible,
 }: VideoProcessingSettingsSectionProps) {
   const t = useTranslations('settings')
+  const tr = useTranslations('review')
 
   const selectedPositions = defaultWatermarkPositions.split(',').map(p => p.trim()).filter(Boolean)
 
@@ -76,6 +81,16 @@ export function VideoProcessingSettingsSection({
       contentClassName="space-y-4 border-t pt-4"
       collapsible={collapsible}
     >
+      <div className="space-y-3 border p-4 rounded-lg bg-muted/30">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="defaultReviewFlow">{tr('defaultLabel')}</Label>
+            <p className="text-xs text-muted-foreground">{tr('defaultHint')}</p>
+          </div>
+          <Switch id="defaultReviewFlow" checked={defaultReviewFlow} onCheckedChange={setDefaultReviewFlow} />
+        </div>
+      </div>
+
       <div className="space-y-3 border p-4 rounded-lg bg-muted/30">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">

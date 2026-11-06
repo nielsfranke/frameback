@@ -34,6 +34,7 @@ interface Settings {
   appDomain: string | null
   defaultPreviewResolution: string | null
   defaultSkipTranscoding: boolean | null
+  defaultReviewFlow?: boolean | null
   defaultWatermarkEnabled: boolean | null
   defaultWatermarkText: string | null
   defaultWatermarkPositions: string | null
@@ -141,6 +142,7 @@ export default function GlobalSettingsPage() {
   const [appDomain, setAppDomain] = useState('')
   const [defaultPreviewResolution, setDefaultPreviewResolution] = useState('720p')
   const [defaultSkipTranscoding, setDefaultSkipTranscoding] = useState(false)
+  const [defaultReviewFlow, setDefaultReviewFlow] = useState(false)
   const [defaultWatermarkEnabled, setDefaultWatermarkEnabled] = useState(true)
   const [defaultWatermarkText, setDefaultWatermarkText] = useState('')
   const [defaultWatermarkPositions, setDefaultWatermarkPositions] = useState('center')
@@ -227,6 +229,7 @@ export default function GlobalSettingsPage() {
     setAppDomain(data.appDomain || '')
     setDefaultPreviewResolution(data.defaultPreviewResolution || '720p')
     setDefaultSkipTranscoding(data.defaultSkipTranscoding ?? false)
+    setDefaultReviewFlow(data.defaultReviewFlow ?? false)
     setDefaultWatermarkEnabled(data.defaultWatermarkEnabled ?? true)
     setDefaultWatermarkText(data.defaultWatermarkText || '')
     setDefaultWatermarkPositions(data.defaultWatermarkPositions || 'center')
@@ -644,6 +647,7 @@ export default function GlobalSettingsPage() {
         appDomain: appDomain || null,
         defaultPreviewResolution: defaultPreviewResolution || '720p',
         defaultSkipTranscoding,
+        defaultReviewFlow,
         defaultWatermarkEnabled: defaultWatermarkEnabled,
         defaultWatermarkText: defaultWatermarkText || null,
         defaultWatermarkPositions: defaultWatermarkPositions || 'center',
@@ -820,6 +824,7 @@ export default function GlobalSettingsPage() {
   const videoProcessingProps = {
     defaultPreviewResolution, setDefaultPreviewResolution,
     defaultSkipTranscoding, setDefaultSkipTranscoding,
+    defaultReviewFlow, setDefaultReviewFlow,
     defaultWatermarkEnabled, setDefaultWatermarkEnabled,
     defaultWatermarkText, setDefaultWatermarkText,
     defaultWatermarkPositions, setDefaultWatermarkPositions,

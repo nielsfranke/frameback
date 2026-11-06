@@ -246,7 +246,7 @@ describe('upload lifecycle', () => {
   })
 })
 
-describe('legacy flow (FEATURE_REVIEW_FLOW off)', () => {
+describe('legacy flow (project reviewFlow off)', () => {
   it('approves any version, exclusively, logged, idempotent', async () => {
     const { project } = await makeProject()
     const v1 = await addVersion(project.id, 'Film', 1)

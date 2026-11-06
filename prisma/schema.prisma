@@ -126,6 +126,8 @@ model Project {
   folderId        String?
   folder          Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
   folderChangedAt DateTime?
+  /// Frameback: clients may only approve versions the studio sent for approval
+  reviewFlow      Boolean   @default(false)
   /// move batch that last placed the project; undo only reverts while this still matches
   folderBatchId   String?
   folderMoves     FolderMoveItem[]
@@ -583,6 +585,8 @@ model Settings {
   // Default Video Processing Settings
   defaultPreviewResolution  String? @default("720p")
   defaultSkipTranscoding    Boolean @default(false)
+  /// Frameback: approval flow preset for new projects
+  defaultReviewFlow         Boolean @default(false)
   defaultWatermarkEnabled   Boolean @default(true)
   defaultWatermarkText      String?
   defaultWatermarkPositions String  @default("center") // comma-separated: center, top-left, top-right, bottom-left, bottom-right

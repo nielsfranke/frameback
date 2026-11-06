@@ -554,7 +554,7 @@ export async function clientDecide(input: ClientDecisionInput, db: Db = defaultP
 }
 
 /**
- * Legacy client approval while FEATURE_REVIEW_FLOW is off: any version may be approved
+ * Legacy client approval while the project has reviewFlow off: any version may be approved
  * (unchanged behaviour), but state and audit entry are recorded consistently.
  */
 export async function legacyClientApprove(

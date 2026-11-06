@@ -314,6 +314,7 @@
     "createFirst": "Erstes Projekt erstellen",
 
     "sortAlphabetically": "Alphabetisch sortieren",
+    "sortClientOrder": "Reihenfolge wie beim Kunden",
     "sortByStatus": "Nach Status sortieren",
     "sortByDate": "Nach Datum sortieren",
     "sortByDueDate": "Nach Fälligkeitsdatum sortieren",
@@ -662,6 +663,9 @@
     "failedToGenerateDownloadLink": "Download-Link konnte nicht erstellt werden"
   },
   "videos": {
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten",
+    "reorderFailed": "Reihenfolge konnte nicht geändert werden. Bitte Seite neu laden und erneut versuchen.",
     "tooManyRequestsSlowDown": "Zu viele Anfragen. Bitte etwas langsamer.",
     "uploadVideo": "Video hochladen",
     "uploadVideos": "Videos hochladen",

@@ -20,6 +20,8 @@ export interface ShareVideo {
   originalFileSize?: string
   reviewState?: 'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED'
   versionNote?: string | null
+  /** Studio-defined position of the video in the project (0 = unsorted) */
+  groupSortOrder?: number
 }
 
 export interface ShareComment {

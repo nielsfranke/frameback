@@ -234,6 +234,7 @@ export async function fetchProjectWithVideos(
           orderBy: { version: 'desc' },
           include: {
             _count: { select: { assets: { where: { uploadCompletedAt: { not: null } } } } },
+            group: { select: { sortOrder: true } },
           },
         },
       },
@@ -248,6 +249,7 @@ export async function fetchProjectWithVideos(
         orderBy: { version: 'desc' },
         include: {
           _count: { select: { assets: { where: { uploadCompletedAt: { not: null } } } } },
+          group: { select: { sortOrder: true } },
         },
       },
     },

@@ -314,6 +314,7 @@
     "createFirst": "Create Your First Project",
 
     "sortAlphabetically": "Sort alphabetically",
+    "sortClientOrder": "Order as clients see it",
     "sortByStatus": "Sort by status",
     "sortByDate": "Sort by date",
     "sortByDueDate": "Sort by due date",
@@ -662,6 +663,9 @@
     "failedToGenerateDownloadLink": "Failed to generate download link"
   },
   "videos": {
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "reorderFailed": "Could not change the order. Please reload the page and try again.",
     "tooManyRequestsSlowDown": "Too many requests. Please slow down.",
     "uploadVideo": "Upload Video",
     "uploadVideos": "Upload Videos",

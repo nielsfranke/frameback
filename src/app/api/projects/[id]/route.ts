@@ -49,6 +49,7 @@ export async function GET(
       include: {
         videos: {
           orderBy: { version: 'desc' },
+          include: { group: { select: { sortOrder: true } } },
         },
         comments: {
           where: { parentId: null },

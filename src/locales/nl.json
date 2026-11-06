@@ -300,6 +300,7 @@
     "noProjectsYet": "Nog geen projecten",
     "createFirst": "Maak je Eerste Project",
     "sortAlphabetically": "Alfabetisch Sorteren",
+    "sortClientOrder": "Volgorde zoals de klant ziet",
     "sortByStatus": "Op Status Sorteren",
     "sortByDate": "Op Datum Sorteren",
     "sortByDueDate": "Op Deadline Sorteren",
@@ -634,6 +635,9 @@
     "failedToGenerateDownloadLink": "Downloadlink genereren mislukt"
   },
   "videos": {
+    "moveUp": "Omhoog",
+    "moveDown": "Omlaag",
+    "reorderFailed": "Volgorde kon niet worden gewijzigd. Herlaad de pagina en probeer opnieuw.",
     "tooManyRequestsSlowDown": "Te veel verzoeken. Probeer het later opnieuw.",
     "uploadVideo": "Video Uploaden",
     "uploadVideos": "Video's Uploaden",

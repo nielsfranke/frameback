@@ -28,6 +28,8 @@ import {
   type ShareComment, type ShareVideo, type VideoUrls,
 } from './api'
 
+const naturalCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
 type Status = 'draft' | 'ready' | 'changes' | 'approved'
 
 interface Props {
@@ -99,6 +101,13 @@ export default function FramebackShareView({
         versions: [...list].filter((v) => v.status === 'READY').sort((a, b) => b.version - a.version),
       }))
       .filter((g) => g.versions.length > 0)
+      .sort((a, b) => {
+        // Studio-defined position first (0 = not positioned, goes last), then natural
+        // name order so "Clip 2" comes before "Clip 10"
+        const pa = a.versions[0].groupSortOrder || Number.MAX_SAFE_INTEGER
+        const pb = b.versions[0].groupSortOrder || Number.MAX_SAFE_INTEGER
+        return pa - pb || naturalCompare.compare(a.name, b.name)
+      })
   }, [project.videosByName])
 
   const [groupName, setGroupName] = useState<string | null>(() => {
@@ -239,7 +248,9 @@ export default function FramebackShareView({
   const emailKey = `fb:email:${slug}`
   const [email, setEmail] = useState('')
   useEffect(() => { try { setEmail(localStorage.getItem(emailKey) || '') } catch { /* ignore */ } }, [emailKey])
-  const emailValid = !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  // Reply e-mails need SMTP; without it the field is hidden and nothing is stored
+  const replyMail = !!project.smtpConfigured
+  const emailValid = !replyMail || !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const saveEmail = (v: string) => {
     const e = v.trim()
     setEmail(e)
@@ -280,7 +291,7 @@ export default function FramebackShareView({
           content,
           isInternal: false,
           authorName: name || undefined,
-          ...(email.trim() && emailValid ? { authorEmail: email.trim(), notifyReplies: true } : {}),
+          ...(replyMail && email.trim() && emailValid ? { authorEmail: email.trim(), notifyReplies: true } : {}),
         }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('failed'))
@@ -449,7 +460,7 @@ export default function FramebackShareView({
         <b>{t('videos')}</b>
         {!guest && <span className="text-xs text-muted-foreground">{t('approvedOf', { done: approvedCount, total: groups.length })}</span>}
       </div>
-      {groups.map((g) => {
+      {groups.map((g, i) => {
         const s = statusOf(g.versions[0], reviewFlow)
         const active = g.name === group.name
         return (
@@ -464,7 +475,10 @@ export default function FramebackShareView({
               {posters[g.versions[0].id] && <img src={posters[g.versions[0].id]!} alt="" className="h-full w-full object-cover" />}
             </span>
             <span className="flex min-w-0 flex-col gap-0.5">
-              <b className="line-clamp-2 break-words text-sm font-semibold" title={g.name}>{displayName(g.name)}</b>
+              <b className="line-clamp-3 break-words text-sm font-semibold" title={g.name}>
+                {groups.length > 1 && <span className="mr-1 tabular-nums text-muted-foreground">{i + 1}.</span>}
+                {displayName(g.name)}
+              </b>
               {!guest && (
                 <span className={`flex items-center gap-1.5 text-xs ${statusDot[s]}`}>
                   <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
@@ -540,7 +554,7 @@ export default function FramebackShareView({
                 <span className="aspect-video w-14 flex-none overflow-hidden rounded bg-muted">
                   {posters[current!.id] && <img src={posters[current!.id]!} alt="" className="h-full w-full object-cover" />}
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col"><b className="truncate text-sm">{displayName(group.name)}</b>
+                <span className="flex min-w-0 flex-1 flex-col"><b className="line-clamp-2 break-words text-sm">{groups.length > 1 && <span className="mr-1 tabular-nums text-muted-foreground">{groups.indexOf(group) + 1}.</span>}{displayName(group.name)}</b>
                   {!guest && <span className={`text-xs ${statusDot[statusOf(current!, reviewFlow)]}`}>{t(`status.${statusOf(current!, reviewFlow)}`)}</span>}</span>
                 <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">{t('itemsCount', { n: groups.length + (project.hasPhotos ? 1 : 0) })}<ChevronDown className="h-4 w-4" /></span>
               </button>
@@ -685,6 +699,7 @@ export default function FramebackShareView({
                         placeholder={t('namePlaceholder')}
                         required
                       />
+                      {replyMail && <>
                       <label htmlFor="fb-composer-email" className="mt-2 block text-xs font-semibold">{t('emailForReplies')}</label>
                       <Input
                         id="fb-composer-email"
@@ -702,6 +717,7 @@ export default function FramebackShareView({
                       <p id="fb-composer-email-hint" className={`mt-1 text-[11px] ${emailValid ? 'text-muted-foreground' : 'text-destructive'}`}>
                         {emailValid ? t('emailForRepliesHint') : t('emailInvalid')}
                       </p>
+                      </>}
                       {knownNames.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1.5" aria-label={t('knownNames')}>
                           {knownNames.slice(0, 6).map((n) => (

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
-import { ChevronDown, ChevronUp, Video, CheckCircle2, Loader2, Pencil, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Video, CheckCircle2, Loader2, Pencil, Trash2, Upload } from 'lucide-react'
 import VideoUpload from './VideoUpload'
 import VideoList from './VideoList'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
@@ -15,6 +15,8 @@ import { apiPatch, apiFetch, apiDelete } from '@/lib/api-client'
 import { FILE_LIMITS } from '@/lib/file-validation'
 import { entryToFiles } from '@/lib/drop-entries'
 import { useTranslations } from 'next-intl'
+
+const naturalCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
 function isVideoFile(file: File): boolean {
   const name = file.name.toLowerCase()
@@ -68,6 +70,7 @@ export default function AdminVideoManager({
   const [editGroupValue, setEditGroupValue] = useState('')
   const [savingGroupName, setSavingGroupName] = useState<string | null>(null)
   const [deletingGroup, setDeletingGroup] = useState<string | null>(null)
+  const [reordering, setReordering] = useState(false)
   const [preview, setPreview] = useState<{ name: string; label: string; token: string } | null>(null)
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({})
   const [sessionId] = useState<string>(() => `admin:${Date.now()}`)
@@ -251,9 +254,12 @@ export default function AdminVideoManager({
       })
   }
 
+  // Studio-defined position (0 = not positioned yet, goes last), then natural name order.
+  // Same rule as the client share view, so the studio sees what the client sees.
+  const positionOf = (name: string) => videoGroups[name]?.[0]?.group?.sortOrder || Number.MAX_SAFE_INTEGER
   const sortedGroupNames = Object.keys(videoGroups).sort((nameA, nameB) => {
     if (sortMode === 'alphabetical') {
-      return nameA.localeCompare(nameB)
+      return positionOf(nameA) - positionOf(nameB) || naturalCompare.compare(nameA, nameB)
     } else {
       // Status sorting
       // Check if ANY version is approved in each group
@@ -268,6 +274,32 @@ export default function AdminVideoManager({
       return nameA.localeCompare(nameB)
     }
   })
+
+  const canReorder = sortMode === 'alphabetical' && sortedGroupNames.length > 1
+  const moveGroup = async (groupName: string, delta: -1 | 1, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const order = [...sortedGroupNames]
+    const from = order.indexOf(groupName)
+    const to = from + delta
+    if (from < 0 || to < 0 || to >= order.length || reordering) return
+    ;[order[from], order[to]] = [order[to], order[from]]
+    const groupIds = order.map((n) => videoGroups[n]?.[0]?.groupId).filter(Boolean)
+    if (groupIds.length !== order.length) return
+    setReordering(true)
+    try {
+      await apiFetch(`/api/projects/${projectId}/video-order`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupIds }),
+      }).then((r) => { if (!r.ok) throw new Error(String(r.status)) })
+      onRefresh?.()
+      router.refresh()
+    } catch {
+      alert(t('reorderFailed'))
+    } finally {
+      setReordering(false)
+    }
+  }
 
   return (
     <div
@@ -306,7 +338,7 @@ export default function AdminVideoManager({
         </Card>
       )}
 
-      {sortedGroupNames.map((groupName) => {
+      {sortedGroupNames.map((groupName, groupIndex) => {
         const groupVideos = videoGroups[groupName]
         const isExpanded = expandedGroup === groupName
         const latestVideo = groupVideos.sort((a, b) => b.version - a.version)[0]
@@ -327,6 +359,21 @@ export default function AdminVideoManager({
               onClick={() => toggleGroup(groupName)}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
+                {canReorder && (
+                  <div className="flex flex-col items-center flex-shrink-0 -ml-1" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" onClick={(e) => moveGroup(groupName, -1, e)} disabled={reordering || groupIndex === 0}
+                      className="rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
+                      title={t('moveUp')} aria-label={`${t('moveUp')}: ${groupName}`}>
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-xs font-semibold tabular-nums text-muted-foreground leading-none py-0.5">{groupIndex + 1}</span>
+                    <button type="button" onClick={(e) => moveGroup(groupName, 1, e)} disabled={reordering || groupIndex === sortedGroupNames.length - 1}
+                      className="rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
+                      title={t('moveDown')} aria-label={`${t('moveDown')}: ${groupName}`}>
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
                 {thumbnails[groupName] ? (
                   <button
                     type="button"

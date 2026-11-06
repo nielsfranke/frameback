@@ -166,6 +166,7 @@ export async function GET(
       hasAssets: (video._count?.assets ?? 0) > 0,
       // Frameback review flow (guests get a reduced set below without these)
       groupId: video.groupId,
+      groupSortOrder: video.group?.sortOrder ?? 0,
       reviewState: video.reviewState,
       versionNote: video.versionNote,
       // Explicitly omit: projectId, originalStoragePath, preview720Path, preview1080Path,
@@ -250,6 +251,7 @@ export async function GET(
       downloadUrl: video.downloadUrl,
       thumbnailUrl: video.thumbnailUrl,
       thumbnailPath: video.thumbnailPath,
+      groupSortOrder: video.groupSortOrder,
     })) : videosSanitizedBase
 
     const sanitizedVideosByName = isGuest ? Object.keys(sortedVideosByName).reduce((acc: any, name: string) => {
@@ -267,6 +269,7 @@ export async function GET(
         streamUrl1080p: video.streamUrl1080p,
         downloadUrl: video.downloadUrl,
         thumbnailUrl: video.thumbnailUrl,
+        groupSortOrder: video.groupSortOrder,
         thumbnailPath: video.thumbnailPath,
       }))
       return acc

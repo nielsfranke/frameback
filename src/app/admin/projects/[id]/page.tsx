@@ -236,7 +236,7 @@ export default function ProjectPage() {
                     size="sm"
                     onClick={() => setSortMode(current => current === 'status' ? 'alphabetical' : 'status')}
                     className="text-muted-foreground hover:text-foreground"
-                    title={sortMode === 'status' ? t('sortAlphabetically') : t('sortByStatus')}
+                    title={sortMode === 'status' ? t('sortClientOrder') : t('sortByStatus')}
                   >
                     <ArrowUpDown className="w-4 h-4" />
                   </Button>

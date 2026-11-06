@@ -2484,7 +2484,7 @@
     "photos": "Fotos",
     "openPhotos": "Fotos ansehen",
     "approvedOf": "{done} von {total} freigegeben",
-    "itemsCount": "{n} Inhalte",
+    "itemsCount": "{n, plural, one {# Inhalt} other {# Inhalte}}",
     "status": {
       "draft": "In Arbeit",
       "ready": "Bitte prüfen",
@@ -2493,7 +2493,7 @@
     },
     "version": "Version {n}",
     "current": "Aktuell",
-    "commentsCount": "{n} Kommentare",
+    "commentsCount": "{n, plural, one {# Kommentar} other {# Kommentare}}",
     "oldVersion": "Das ist eine ältere Version. Aktuell ist Version {n}.",
     "toCurrent": "Zur aktuellen Version",
     "newIn": "Neu in Version {n}:",
@@ -2551,13 +2551,13 @@
     "approveBullet1": "Das Studio wird sofort benachrichtigt.",
     "approveBullet2": "Die finale Datei ohne Wasserzeichen wird für dich freigeschaltet.",
     "approveBullet3": "Rückgängig machen kann danach nur noch das Studio.",
-    "approveWarnComments": "Zu dieser Version gibt es {n} Kommentare von euch. Sollen die noch umgesetzt werden? Dann lieber „Änderungen anfordern“.",
+    "approveWarnComments": "Zu dieser Version {n, plural, one {gibt es einen Kommentar} other {gibt es # Kommentare}} von euch. Soll das noch umgesetzt werden? Dann lieber „Änderungen anfordern“.",
     "cancel": "Abbrechen",
     "ratherRequestChanges": "Doch Änderungen anfordern",
     "approveConfirm": "Ja, Version {n} freigeben",
     "approvedToast": "{name} {version} freigegeben – das Studio wurde informiert",
     "changesDialogTitle": "Änderungen anfordern",
-    "changesDialogIntro": "Das Studio bekommt deine {n} Kommentare zu „{name}“ · Version {version} als Liste und macht eine neue Version.",
+    "changesDialogIntro": "Das Studio bekommt {n, plural, =0 {deine Zusammenfassung} one {deinen Kommentar} other {deine # Kommentare}} zu „{name}“ · Version {version} und macht eine neue Version.",
     "summaryLabel": "Zusammenfassung (optional)",
     "summaryPlaceholder": "z. B. Bitte vor allem Musik und Logo-Länge anpassen.",
     "sendToStudio": "An das Studio senden",
@@ -2581,6 +2581,10 @@
     "editComment": "Kommentar bearbeiten",
     "save": "Speichern",
     "edit": "Bearbeiten",
-    "delete": "Löschen"
+    "delete": "Löschen",
+    "streamUnavailable": "Das Video kann gerade nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "onlyApprovedVersion": "Nur bei der freigegebenen Version verfügbar",
+    "zipLimit": "Das ZIP enthält die ersten 50 Dateien. Weitere einzeln herunterladen."
   }
 }

@@ -70,7 +70,7 @@ export default function ReviewRequestControl({ videoId, versionLabel, reviewStat
         {t(`state.${reviewState}`)}
       </span>
       {(reviewState === 'DRAFT' || reviewState === 'CHANGES_REQUESTED') && (
-        <Button size="sm" className="h-7" onClick={() => setOpen(true)} disabled={busy}>
+        <Button size="sm" className="h-7" onClick={() => { setNote(versionNote ?? ''); setError(null); setOpen(true) }} disabled={busy}>
           <Send className="mr-1.5 h-3.5 w-3.5" />
           {t('send')}
         </Button>

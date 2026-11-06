@@ -2485,7 +2485,7 @@
     "photos": "Photos",
     "openPhotos": "View photos",
     "approvedOf": "{done} of {total} approved",
-    "itemsCount": "{n} items",
+    "itemsCount": "{n, plural, one {# item} other {# items}}",
     "status": {
       "draft": "In progress",
       "ready": "Please review",
@@ -2494,7 +2494,7 @@
     },
     "version": "Version {n}",
     "current": "Current",
-    "commentsCount": "{n} comments",
+    "commentsCount": "{n, plural, one {# comment} other {# comments}}",
     "oldVersion": "This is an older version. The current one is version {n}.",
     "toCurrent": "Go to current version",
     "newIn": "New in version {n}:",
@@ -2552,13 +2552,13 @@
     "approveBullet1": "The studio is notified right away.",
     "approveBullet2": "The final file without watermark becomes available to you.",
     "approveBullet3": "Afterwards only the studio can undo it.",
-    "approveWarnComments": "There are {n} comments from your side on this version. Should they still be done? Then rather request changes.",
+    "approveWarnComments": "There {n, plural, one {is one comment} other {are # comments}} from your side on this version. Should it still be done? Then rather request changes.",
     "cancel": "Cancel",
     "ratherRequestChanges": "Request changes instead",
     "approveConfirm": "Yes, approve version {n}",
     "approvedToast": "{name} {version} approved – the studio has been notified",
     "changesDialogTitle": "Request changes",
-    "changesDialogIntro": "The studio receives your {n} comments on “{name}” · version {version} as a list and makes a new version.",
+    "changesDialogIntro": "The studio receives {n, plural, =0 {your summary} one {your comment} other {your # comments}} on “{name}” · version {version} and makes a new version.",
     "summaryLabel": "Summary (optional)",
     "summaryPlaceholder": "e.g. Please mainly adjust the music and logo length.",
     "sendToStudio": "Send to the studio",
@@ -2582,6 +2582,10 @@
     "editComment": "Edit comment",
     "save": "Save",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "streamUnavailable": "The video can't be loaded right now.",
+    "retry": "Try again",
+    "onlyApprovedVersion": "Only available for the approved version",
+    "zipLimit": "The ZIP contains the first 50 files. Download others individually."
   }
 }

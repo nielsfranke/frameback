@@ -75,7 +75,12 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
   }
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle() }
+    // Buttons and text fields handle their own keys
+    const tag = (e.target as HTMLElement).tagName
+    if (tag === 'BUTTON' || tag === 'TEXTAREA' || tag === 'INPUT') return
+    if (e.key === 'Home') { e.preventDefault(); if (video.current) video.current.currentTime = 0 }
+    else if (e.key === 'End') { e.preventDefault(); if (video.current) video.current.currentTime = Math.max(0, (video.current.duration || duration) - 0.1) }
+    else if (e.key === ' ' || e.key === 'k') { e.preventDefault(); toggle() }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); seekBy(-5) }
     else if (e.key === 'ArrowRight') { e.preventDefault(); seekBy(5) }
     else if (e.key === 'm') { setMuted((m) => !m) }
@@ -85,10 +90,10 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
   const pct = duration > 0 ? (time / duration) * 100 : 0
 
   return (
-    <div className="flex flex-col gap-3">
+    // The whole player (video + controls) goes fullscreen, so controls stay usable there
+    <div ref={frame} onKeyDown={onKey} className="flex flex-col gap-3 [&:fullscreen]:bg-black [&:fullscreen]:p-4 [&:fullscreen]:text-white">
       <div
-        ref={frame}
-        className="relative w-full overflow-hidden rounded-xl bg-black aspect-video max-h-[62vh] flex items-center justify-center"
+        className="relative flex aspect-video max-h-[62vh] w-full items-center justify-center overflow-hidden rounded-xl bg-black [:fullscreen_&]:max-h-none [:fullscreen_&]:flex-1"
       >
         <video
           ref={video}
@@ -141,7 +146,6 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
           aria-valuemax={Math.round(duration)}
           aria-valuenow={Math.round(time)}
           aria-valuetext={formatSeconds(time)}
-          onKeyDown={onKey}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest('[data-marker]')) return
             const r = e.currentTarget.getBoundingClientRect()
@@ -158,6 +162,7 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
               type="button"
               data-marker
               onClick={() => onMarker?.(m.id)}
+              onKeyDown={(e) => e.stopPropagation()}
               title={m.label}
               aria-label={m.label}
               className={`absolute top-0 -ml-[13px] flex h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-background text-[9px] font-bold text-white ${m.studio ? 'bg-primary' : 'bg-violet-600'}`}

@@ -66,6 +66,8 @@ const toPlainText = (html: string) =>
   typeof DOMParser !== 'undefined' ? new DOMParser().parseFromString(html, 'text/html').body.textContent || '' : html
 
 function download(url: string) {
+  // Only same-origin download URLs (token endpoints); never follow foreign URLs
+  if (!url.startsWith('/') || url.startsWith('//')) return
   const a = document.createElement('a')
   a.href = url
   a.rel = 'noopener'
@@ -73,6 +75,8 @@ function download(url: string) {
   a.click()
   a.remove()
 }
+
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(typeof document !== 'undefined' ? document.documentElement.lang || undefined : undefined)
 
 export default function FramebackShareView({
   slug, project, shareToken, authenticatedName, reviewFlow, defaultQuality, onRefresh, onOpenPhotos,
@@ -102,17 +106,29 @@ export default function FramebackShareView({
   const isOld = !!selected && !!current && selected.id !== current.id
   const status = selected ? statusOf(selected, reviewFlow) : 'draft'
 
-  const [urls, setUrls] = useState<VideoUrls | null>(null)
+  const [urls, setUrls] = useState<(VideoUrls & { videoId: string }) | null>(null)
+  const [urlError, setUrlError] = useState<string | null>(null)
+  const [urlAttempt, setUrlAttempt] = useState(0)
   const [posters, setPosters] = useState<Record<string, string | null>>({})
   const [time, setTime] = useState(0)
 
+  // Stream URL per version. Re-requested when the approval changes (watermark vs clean file).
   useEffect(() => {
     if (!selected) return
     let cancelled = false
     setUrls(null)
-    loadVideoUrls(slug, shareToken, selected, defaultQuality).then((u) => { if (!cancelled) setUrls(u) })
+    setUrlError(null)
+    setTime(0)
+    loadVideoUrls(slug, shareToken, selected, defaultQuality)
+      .then((u) => {
+        if (cancelled) return
+        if (!u.stream) setUrlError(t('streamUnavailable'))
+        else setUrls({ ...u, videoId: selected.id })
+      })
+      .catch(() => { if (!cancelled) setUrlError(t('streamUnavailable')) })
     return () => { cancelled = true }
-  }, [slug, shareToken, selected?.id, defaultQuality]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [slug, shareToken, selected?.id, selected?.approved, defaultQuality, urlAttempt]) // eslint-disable-line react-hooks/exhaustive-deps
+  const urlsReady = !!urls && urls.videoId === selected?.id
 
   useEffect(() => {
     let cancelled = false
@@ -195,9 +211,12 @@ export default function FramebackShareView({
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null)
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(null), 6000); return () => clearTimeout(id) }, [toast])
 
+  const sendingRef = useRef(false)
   const send = async () => {
-    const content = (draft[draftKey] || '').trim()
-    if (!content || !selected) return
+    const raw = draft[draftKey] || ''
+    const content = raw.trim()
+    if (!content || !selected || sendingRef.current) return
+    sendingRef.current = true
     setPosting(true)
     try {
       const res = await fetch('/api/comments', {
@@ -215,11 +234,13 @@ export default function FramebackShareView({
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('failed'))
       setComments(await res.json())
-      setDraft((d) => ({ ...d, [draftKey]: '' }))
+      // Clear only what was sent; text typed during the request stays
+      setDraft((d) => ({ ...d, [draftKey]: d[draftKey] === raw ? '' : d[draftKey] }))
       setToast({ text: t('commentSent') })
     } catch (e) {
       setToast({ text: e instanceof Error ? e.message : t('failed') })
     } finally {
+      sendingRef.current = false
       setPosting(false)
     }
   }
@@ -252,66 +273,95 @@ export default function FramebackShareView({
   const canDecide = !!selected && !isOld && !project.isGuest && project.clientCanApprove !== false && status === 'ready'
   const canRequestChanges = canDecide && reviewFlow
   const [dialog, setDialog] = useState<null | 'approve' | 'changes' | 'help'>(null)
+  // The decision target is frozen when the dialog opens; a refresh cannot swap the version.
+  const [target, setTarget] = useState<{ videoId: string; version: number; name: string; versionLabel: string; createdAt: string } | null>(null)
+  const decidingRef = useRef(false)
   const [changesNote, setChangesNote] = useState('')
   const [deciding, setDeciding] = useState(false)
   const decisionKey = useRef(newIdempotencyKey())
-  const openDialog = (d: 'approve' | 'changes') => { decisionKey.current = newIdempotencyKey(); setDialog(d) }
+  const openDialog = (d: 'approve' | 'changes') => {
+    if (!selected || !canDecide) return
+    if (!target || target.videoId !== selected.id) {
+      decisionKey.current = newIdempotencyKey()
+      setTarget({ videoId: selected.id, version: selected.version, name: selected.name, versionLabel: selected.versionLabel, createdAt: selected.createdAt })
+    }
+    setDialog(d)
+  }
+  // Close a decision dialog when its target is no longer decidable (refresh, new version)
+  useEffect(() => {
+    if ((dialog === 'approve' || dialog === 'changes') && target && (!canDecide || selected?.id !== target.videoId) && !decidingRef.current) {
+      setDialog(null)
+      setTarget(null)
+    }
+  }, [dialog, target, canDecide, selected?.id])
   const clientCommentIds = versionComments.filter((c) => !c.isInternal && !c.deleted).map((c) => c.id)
 
   const approve = async () => {
-    if (!selected) return
+    if (!target || decidingRef.current) return
+    decidingRef.current = true
     setDeciding(true)
     try {
       const res = await fetch(`/api/projects/${project.id}/approve`, {
         method: 'POST',
         headers: { ...authHeaders(shareToken, true), 'Idempotency-Key': decisionKey.current },
-        body: JSON.stringify({ selectedVideoId: selected.id, authorName: name || undefined }),
+        body: JSON.stringify({ selectedVideoId: target.videoId, authorName: name || undefined }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('failed'))
       setDialog(null)
-      setToast({ text: t('approvedToast', { name: selected.name, version: selected.versionLabel }) })
+      setToast({ text: t('approvedToast', { name: target.name, version: target.versionLabel }) })
+      setTarget(null)
       await onRefresh()
     } catch (e) {
       setToast({ text: e instanceof Error ? e.message : t('failed') })
     } finally {
+      decidingRef.current = false
       setDeciding(false)
     }
   }
   const requestChanges = async () => {
-    if (!selected) return
+    if (!target || decidingRef.current) return
+    decidingRef.current = true
     setDeciding(true)
     try {
       const res = await fetch(`/api/share/${slug}/decisions`, {
         method: 'POST',
         headers: { ...authHeaders(shareToken, true), 'Idempotency-Key': decisionKey.current },
-        body: JSON.stringify({ videoId: selected.id, kind: 'REQUEST_CHANGES', authorName: name || undefined, note: changesNote || null, commentIds: clientCommentIds }),
+        body: JSON.stringify({ videoId: target.videoId, kind: 'REQUEST_CHANGES', authorName: name || undefined, note: changesNote || null, commentIds: clientCommentIds }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('failed'))
       setDialog(null)
       setChangesNote('')
+      setTarget(null)
       setToast({ text: t('changesToast') })
       await onRefresh()
     } catch (e) {
       setToast({ text: e instanceof Error ? e.message : t('failed') })
     } finally {
+      decidingRef.current = false
       setDeciding(false)
     }
   }
 
   // ---- files ----------------------------------------------------------------
-  const [assets, setAssets] = useState<Array<{ id: string; fileName: string; fileSize: string; category?: string | null }>>([])
+  const [assetState, setAssetState] = useState<{ videoId: string; list: Array<{ id: string; fileName: string; fileSize: string; category?: string | null }> } | null>(null)
+  const assets = assetState && assetState.videoId === selected?.id ? assetState.list : []
   const [showThumbs, setShowThumbs] = useState(false)
   const [showExtra, setShowExtra] = useState(false)
   useEffect(() => {
-    if (!selected?.hasAssets) { setAssets([]); return }
+    if (!selected?.hasAssets) { setAssetState(null); return }
     let cancelled = false
-    fetch(`/api/videos/${selected.id}/assets`, { headers: authHeaders(shareToken), cache: 'no-store' })
+    const videoId = selected.id
+    fetch(`/api/videos/${videoId}/assets`, { headers: authHeaders(shareToken), cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : { assets: [] }))
-      .then((d) => { if (!cancelled) setAssets(d.assets || []) })
+      .then((d) => { if (!cancelled) setAssetState({ videoId, list: d.assets || [] }) })
+      .catch(() => { if (!cancelled) setAssetState({ videoId, list: [] }) })
     return () => { cancelled = true }
   }, [selected?.id, selected?.hasAssets, shareToken])
-  const finalAvailable = !!selected?.approved && project.allowAssetDownload !== false && !isOld
-  const lockReason = project.allowAssetDownload === false ? t('downloadsDisabled') : t('availableAfterApproval')
+  const isApproved = (v?: ShareVideo) => !!v && (!!v.approved || v.reviewState === 'APPROVED')
+  const finalAvailable = isApproved(selected) && project.allowAssetDownload !== false
+  const lockReason = project.allowAssetDownload === false
+    ? t('downloadsDisabled')
+    : isOld ? t('onlyApprovedVersion') : t('availableAfterApproval')
   const tokenDownload = async (url: string, body: unknown = {}) => {
     try {
       const res = await fetch(url, { method: 'POST', headers: authHeaders(shareToken, true), body: JSON.stringify(body) })
@@ -326,8 +376,10 @@ export default function FramebackShareView({
   // ---- layout state -----------------------------------------------------------
   const [navOpen, setNavOpen] = useState(false)
   const [verMenu, setVerMenu] = useState(false)
+  const verBtn = useRef<HTMLButtonElement>(null)
   const [typing, setTyping] = useState(false)
-  const approvedCount = groups.filter((g) => g.versions.some((v) => v.approved)).length
+  const typingHandlers = useMemo(() => [() => setTyping(true), () => setTyping(false)] as [() => void, () => void], [])
+  const approvedCount = groups.filter((g) => isApproved(g.versions[0])).length
   const showNav = groups.length + (project.hasPhotos ? 1 : 0) > 1
   const showDecisionBar = canDecide
 
@@ -399,7 +451,7 @@ export default function FramebackShareView({
   }
 
   return (
-    <div className={`flex min-h-screen flex-col bg-background ${showDecisionBar ? 'pb-24 md:pb-0' : ''} ${typing ? 'fb-typing' : ''}`}>
+    <div className={`flex min-h-screen flex-col bg-background ${showDecisionBar ? 'pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0' : ''} ${typing ? 'fb-typing' : ''}`}>
       {/* top bar */}
       <header className="flex items-center gap-3 border-b bg-card px-4 py-2.5">
         <BrandLogo height={28} />
@@ -408,19 +460,19 @@ export default function FramebackShareView({
           {(project.companyName || project.clientName) && <span className="truncate text-xs text-muted-foreground">{project.companyName || project.clientName}</span>}
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => setDialog('help')}><HelpCircle className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">{t('help')}</span></Button>
+          <Button variant="ghost" size="sm" aria-label={t('help')} onClick={() => setDialog('help')}><HelpCircle className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">{t('help')}</span></Button>
           <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>
 
       <div className="flex flex-1 flex-col md:flex-row">
-        {showNav && <aside className="hidden w-[280px] flex-none border-r bg-card p-3 md:block">{navList}</aside>}
+        {showNav && <aside className="hidden w-[280px] flex-none border-r bg-card p-3 lg:block">{navList}</aside>}
 
         {/* stage */}
         <section className="flex min-w-0 flex-1 flex-col gap-3.5 p-4 md:p-5">
           {showNav && (
-            <div className="relative md:hidden">
+            <div className="relative lg:hidden">
               <button type="button" onClick={() => setNavOpen((o) => !o)} aria-expanded={navOpen} className="flex w-full items-center gap-3 rounded-xl border bg-card p-2 text-left">
                 <span className="aspect-video w-14 flex-none overflow-hidden rounded bg-muted">
                   {posters[current!.id] && <img src={posters[current!.id]!} alt="" className="h-full w-full object-cover" />}
@@ -437,18 +489,19 @@ export default function FramebackShareView({
             <h1 className="text-xl font-semibold">{group.name}</h1>
             {group.versions.length > 1 ? (
               <div className="relative">
-                <button type="button" onClick={() => setVerMenu((m) => !m)} aria-expanded={verMenu} className="inline-flex h-9 items-center gap-2 rounded-lg border bg-card px-3 text-sm font-semibold">
+                <button ref={verBtn} type="button" onClick={() => setVerMenu((m) => !m)} aria-expanded={verMenu} aria-haspopup="menu" className="inline-flex h-9 items-center gap-2 rounded-lg border bg-card px-3 text-sm font-semibold">
                   {t('version', { n: selected.version })}
                   {!isOld && <span className="text-xs font-semibold text-success">· {t('current')}</span>}
                   <ChevronDown className="h-4 w-4" />
                 </button>
                 {verMenu && (
-                  <div role="menu" className="absolute left-0 top-11 z-30 w-80 rounded-xl border bg-card p-1.5 shadow-xl">
+                  <div role="menu" onKeyDown={(e) => { if (e.key === 'Escape') { setVerMenu(false); verBtn.current?.focus() } }}
+                    className="absolute left-0 top-11 z-30 w-[min(20rem,calc(100vw-2rem))] rounded-xl border bg-card p-1.5 shadow-xl">
                     {group.versions.map((v, i) => (
-                      <button key={v.id} role="menuitem" type="button" onClick={() => { setVersionId(i === 0 ? null : v.id); setVerMenu(false) }}
+                      <button key={v.id} role="menuitem" type="button" autoFocus={v.id === selected.id} onClick={() => { setVersionId(i === 0 ? null : v.id); setVerMenu(false); verBtn.current?.focus() }}
                         className={`grid w-full grid-cols-[1fr_auto] gap-x-2 rounded-lg p-2.5 text-left hover:bg-muted ${v.id === selected.id ? 'bg-primary-visible' : ''}`}>
                         <b className="text-sm">{t('version', { n: v.version })}{i === 0 ? ` · ${t('current')}` : ''}</b>
-                        <span className="text-xs text-muted-foreground">{new Date(v.createdAt).toLocaleDateString()}</span>
+                        <span className="text-xs text-muted-foreground">{fmtDate(v.createdAt)}</span>
                         <small className="col-span-2 text-xs text-muted-foreground">{t('commentsCount', { n: commentCountFor(v.id) })}{v.versionNote ? ` · ${v.versionNote}` : ''}</small>
                       </button>
                     ))}
@@ -469,11 +522,17 @@ export default function FramebackShareView({
             <p className="m-0 text-sm text-muted-foreground"><b className="font-semibold text-foreground">{t('newIn', { n: selected.version })}</b> {selected.versionNote}</p>
           ) : null}
 
-          {urls ? (
+          {urlError ? (
+            <div className="flex aspect-video max-h-[62vh] flex-col items-center justify-center gap-3 rounded-xl bg-muted p-6 text-center text-sm text-muted-foreground">
+              {urlError}
+              <Button size="sm" variant="outline" onClick={() => setUrlAttempt((n) => n + 1)}>{t('retry')}</Button>
+            </div>
+          ) : urlsReady ? (
             <Player
+              key={selected.id}
               ref={player}
-              src={urls.stream}
-              poster={urls.poster}
+              src={urls!.stream}
+              poster={urls!.poster}
               duration={selected.duration}
               markers={markers}
               showPreviewBadge={!selected.approved || isOld}
@@ -488,7 +547,7 @@ export default function FramebackShareView({
           {statusLine()}
 
           {showDecisionBar && (
-            <div className="fb-decision fixed inset-x-0 bottom-0 z-50 flex flex-wrap items-center gap-3 rounded-t-2xl border bg-card p-3 shadow-2xl md:static md:rounded-xl md:p-4 md:shadow-none">
+            <div className="fb-decision fixed inset-x-0 bottom-0 z-50 flex flex-wrap items-center gap-3 rounded-t-2xl border bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl md:static md:rounded-xl md:p-4 md:shadow-none">
               <div className="flex min-w-0 flex-1 basis-full items-start gap-2.5 md:basis-auto">
                 <span className="mt-1.5 h-2.5 w-2.5 flex-none rounded-full bg-primary" aria-hidden />
                 <div><b className="block">{t('readyTitle', { n: selected.version })}</b>
@@ -506,15 +565,16 @@ export default function FramebackShareView({
         <aside className="flex min-h-0 w-full flex-none flex-col border-t bg-card md:w-[380px] md:border-l md:border-t-0 lg:w-[400px]">
           <div role="tablist" className="flex gap-1 border-b px-3 pt-2">
             {(['comments', 'files'] as const).map((k) => (
-              <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => setTab(k)}
+              <button key={k} id={`fb-tab-${k}`} role="tab" type="button" aria-selected={tab === k} aria-controls="fb-tabpanel" onClick={() => setTab(k)}
                 className={`-mb-px border-b-2 px-3 py-2.5 text-sm font-semibold ${tab === k ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}>
-                {t(k)}{k === 'comments' && versionComments.filter((c) => !c.deleted).length > 0 && (
+                {t(k)}{k === 'files' && !finalAvailable && <Lock className="ml-1.5 inline h-3 w-3 align-[-1px] text-muted-foreground" aria-hidden />}{k === 'comments' && versionComments.filter((c) => !c.deleted).length > 0 && (
                   <span className="ml-1.5 inline-grid min-w-5 place-items-center rounded-full bg-muted px-1.5 text-[11px]">{versionComments.filter((c) => !c.deleted).length}</span>
                 )}
               </button>
             ))}
           </div>
 
+          <div id="fb-tabpanel" role="tabpanel" aria-labelledby={`fb-tab-${tab}`} className="flex min-h-0 flex-1 flex-col">
           {tab === 'comments' ? (
             <>
               <div className="flex-1 overflow-auto p-3.5">
@@ -524,7 +584,8 @@ export default function FramebackShareView({
                 )}
                 {versionComments.map((c) => (
                   <CommentItem key={c.id} c={c} fps={fps} highlight={highlight === c.id}
-                    editing={editing} setEditing={setEditing} onSave={saveEdit} onDelete={remove} onJump={jumpTo} t={t} />
+                    editing={editing} setEditing={setEditing} onSave={saveEdit} onDelete={remove} onJump={jumpTo} t={t}
+                    onTyping={typingHandlers} />
                 ))}
               </div>
               {feedback && !isOld && (
@@ -555,7 +616,7 @@ export default function FramebackShareView({
               {isOld && <p className="mb-2.5 flex items-center gap-2 rounded-lg bg-muted p-2.5 text-xs text-muted-foreground"><Layers className="h-4 w-4" />{t('filesOfOld', { n: selected.version })}</p>}
               <FileRow icon={<Film className="h-4 w-4" />} title={t('finalVideo')} sub={finalAvailable ? selected.originalFileName : lockReason}
                 locked={!finalAvailable} onDownload={() => tokenDownload(`/api/videos/${selected.id}/download-token`)} t={t} />
-              {urls?.stream && (
+              {urlsReady && urls?.stream && (
                 <FileRow icon={<Film className="h-4 w-4" />} title={selected.approved ? t('previewClean') : t('previewWatermark')} sub={t('previewSub')}
                   onDownload={() => download(`${urls.stream}${urls.stream.includes('?') ? '&' : '?'}download=true`)} t={t} />
               )}
@@ -582,17 +643,21 @@ export default function FramebackShareView({
                 </>
               )}
               {finalAvailable && assets.length > 0 && (
-                <Button variant="outline" className="mt-3 w-full" onClick={() => tokenDownload(`/api/videos/${selected.id}/assets/download-zip-token`, { assetIds: assets.map((a) => a.id).slice(0, 50), includeVideo: true })}>
-                  <Download className="mr-1.5 h-4 w-4" />{t('downloadAll')}
-                </Button>
+                <>
+                  <Button variant="outline" className="mt-3 w-full" onClick={() => tokenDownload(`/api/videos/${selected.id}/assets/download-zip-token`, { assetIds: assets.map((a) => a.id).slice(0, 50), includeVideo: true })}>
+                    <Download className="mr-1.5 h-4 w-4" />{t('downloadAll')}
+                  </Button>
+                  {assets.length > 50 && <p className="mt-1.5 text-xs text-muted-foreground">{t('zipLimit')}</p>}
+                </>
               )}
             </div>
           )}
+          </div>
         </aside>
       </div>
 
       {/* dialogs */}
-      <Dialog open={welcome} onOpenChange={() => { /* explicit button only */ }}>
+      <Dialog open={welcome} onOpenChange={(o) => { if (!o) { saveName(name); setWelcome(false) } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t('welcomeTitle')}</DialogTitle>
@@ -613,12 +678,12 @@ export default function FramebackShareView({
       <Dialog open={dialog === 'approve'} onOpenChange={(o) => !o && setDialog(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('approveTitle', { n: selected.version })}</DialogTitle>
+            <DialogTitle>{t('approveTitle', { n: target?.version ?? selected.version })}</DialogTitle>
             <DialogDescription>{t('approveIntro')}</DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-3 rounded-xl bg-muted p-3">
-            <span className="aspect-video w-24 flex-none overflow-hidden rounded bg-background">{urls?.poster && <img src={urls.poster} alt="" className="h-full w-full object-cover" />}</span>
-            <div><b>{selected.name}</b><div className="text-sm text-muted-foreground">{t('version', { n: selected.version })} · {new Date(selected.createdAt).toLocaleDateString()}</div></div>
+            <span className="aspect-video w-24 flex-none overflow-hidden rounded bg-background">{urlsReady && urls?.poster && <img src={urls.poster} alt="" className="h-full w-full object-cover" />}</span>
+            <div><b>{target?.name ?? selected.name}</b><div className="text-sm text-muted-foreground">{t('version', { n: target?.version ?? selected.version })} · {fmtDate(target?.createdAt ?? selected.createdAt)}</div></div>
           </div>
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
             <li>{t('approveBullet1')}</li><li>{t('approveBullet2')}</li><li>{t('approveBullet3')}</li>
@@ -631,7 +696,7 @@ export default function FramebackShareView({
           <DialogFooter className="flex-wrap gap-2">
             <Button variant="ghost" onClick={() => setDialog(null)}>{t('cancel')}</Button>
             {canRequestChanges && <Button variant="outline" onClick={() => openDialog('changes')}>{t('ratherRequestChanges')}</Button>}
-            <Button className="bg-success text-success-foreground hover:bg-success/90" onClick={approve} disabled={deciding}><Check className="mr-1.5 h-4 w-4" />{t('approveConfirm', { n: selected.version })}</Button>
+            <Button className="bg-success text-success-foreground hover:bg-success/90" onClick={approve} disabled={deciding}><Check className="mr-1.5 h-4 w-4" />{t('approveConfirm', { n: target?.version ?? selected.version })}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -640,7 +705,7 @@ export default function FramebackShareView({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('changesDialogTitle')}</DialogTitle>
-            <DialogDescription>{t('changesDialogIntro', { n: clientCommentIds.length, name: selected.name, version: selected.version })}</DialogDescription>
+            <DialogDescription>{t('changesDialogIntro', { n: clientCommentIds.length, name: target?.name ?? selected.name, version: target?.version ?? selected.version })}</DialogDescription>
           </DialogHeader>
           <label htmlFor="fb-changes" className="text-sm font-semibold">{t('summaryLabel')}</label>
           <Textarea id="fb-changes" value={changesNote} onChange={(e) => setChangesNote(e.target.value)} maxLength={2000} placeholder={t('summaryPlaceholder')} />
@@ -664,7 +729,10 @@ export default function FramebackShareView({
       {toast && (
         <div role="status" className="fixed bottom-28 left-1/2 z-[60] flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background shadow-2xl md:bottom-6">
           {toast.text}
-          {toast.undo && <button type="button" className="font-bold underline" onClick={() => { const u = toast.undo!; setToast(null); void u() }}>{t('undo')}</button>}
+          {toast.undo && <button type="button" className="font-bold underline" onClick={async () => {
+            const u = toast.undo!
+            try { await u(); setToast(null) } catch (e) { setToast({ text: e instanceof Error ? e.message : t('failed') }) }
+          }}>{t('undo')}</button>}
           <button type="button" aria-label={t('close')} onClick={() => setToast(null)}><X className="h-4 w-4" /></button>
         </div>
       )}
@@ -688,11 +756,12 @@ function FileRow({ icon, title, sub, locked, onDownload, t }: {
   )
 }
 
-function CommentItem({ c, fps, highlight, editing, setEditing, onSave, onDelete, onJump, t }: {
+function CommentItem({ c, fps, highlight, editing, setEditing, onSave, onDelete, onJump, t, onTyping }: {
   c: ShareComment & { seconds: number }; fps: number; highlight: boolean
   editing: { id: string; text: string } | null; setEditing: (e: { id: string; text: string } | null) => void
   onSave: () => void; onDelete: (id: string) => void; onJump: (c: { id: string; seconds: number }) => void
   t: (k: string, v?: Record<string, string | number>) => string
+  onTyping?: [() => void, () => void]
 }) {
   const replies = (c.replies || []).map((r) => ({ ...r, seconds: r.timecode ? timecodeToSeconds(r.timecode, fps) : c.seconds }))
   return (
@@ -700,22 +769,23 @@ function CommentItem({ c, fps, highlight, editing, setEditing, onSave, onDelete,
       {c.deleted ? (
         <p className="text-sm italic text-muted-foreground">{t('deletedPlaceholder')}</p>
       ) : (
-        <Bubble c={c} editing={editing} setEditing={setEditing} onSave={onSave} onDelete={onDelete} onJump={onJump} t={t} />
+        <Bubble c={c} editing={editing} setEditing={setEditing} onSave={onSave} onDelete={onDelete} onJump={onJump} t={t} onTyping={onTyping} />
       )}
       {replies.filter((r) => !r.deleted).map((r) => (
         <div key={r.id} className="ml-7 mt-2">
-          <Bubble c={r} editing={editing} setEditing={setEditing} onSave={onSave} onDelete={onDelete} onJump={onJump} t={t} hideTime />
+          <Bubble c={r} editing={editing} setEditing={setEditing} onSave={onSave} onDelete={onDelete} onJump={onJump} t={t} onTyping={onTyping} hideTime />
         </div>
       ))}
     </div>
   )
 }
 
-function Bubble({ c, editing, setEditing, onSave, onDelete, onJump, t, hideTime }: {
+function Bubble({ c, editing, setEditing, onSave, onDelete, onJump, t, hideTime, onTyping }: {
   c: ShareComment & { seconds: number }
   editing: { id: string; text: string } | null; setEditing: (e: { id: string; text: string } | null) => void
   onSave: () => void; onDelete: (id: string) => void; onJump: (c: { id: string; seconds: number }) => void
   t: (k: string, v?: Record<string, string | number>) => string; hideTime?: boolean
+  onTyping?: [() => void, () => void]
 }) {
   const isEditing = editing?.id === c.id
   return (
@@ -734,7 +804,7 @@ function Bubble({ c, editing, setEditing, onSave, onDelete, onJump, t, hideTime 
         )}
         {isEditing ? (
           <>
-            <Textarea className="mt-1.5" value={editing!.text} onChange={(e) => setEditing({ id: c.id, text: e.target.value })} aria-label={t('editComment')} autoFocus />
+            <Textarea className="mt-1.5" onFocus={onTyping?.[0]} onBlur={onTyping?.[1]} value={editing!.text} onChange={(e) => setEditing({ id: c.id, text: e.target.value })} aria-label={t('editComment')} autoFocus />
             <div className="mt-1.5 flex gap-2"><Button size="sm" onClick={onSave}>{t('save')}</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>{t('cancel')}</Button></div>
           </>
         ) : (

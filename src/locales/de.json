@@ -2588,6 +2588,11 @@
     "zipLimit": "Das ZIP enthält die ersten 50 Dateien. Weitere einzeln herunterladen.",
     "addComment": "Kommentar hinzufügen",
     "commentSentCollect": "Kommentar gespeichert. Wenn du fertig bist: „Änderungen anfordern“.",
-    "nameHint": "Erscheint bei deinen Kommentaren, damit das Studio weiß, von wem sie sind."
+    "nameHint": "Erscheint bei deinen Kommentaren, damit das Studio weiß, von wem sie sind.",
+    "optionalNow": "kannst du auch später angeben",
+    "namePlaceholder": "z. B. Anna Keller",
+    "knownNames": "Schon verwendete Namen",
+    "commentingAs": "Kommentieren als",
+    "change": "ändern"
   }
 }

@@ -33,10 +33,12 @@ interface Props {
   vertical?: boolean
   onTime?: (seconds: number) => void
   onMarker?: (commentId: string) => void
+  /** Marker to highlight (e.g. the comment that was just clicked) */
+  activeMarkerId?: string | null
 }
 
 const Player = forwardRef<PlayerHandle, Props>(function Player(
-  { src, poster, duration: knownDuration, markers, showPreviewBadge, vertical, onTime, onMarker },
+  { src, poster, duration: knownDuration, markers, showPreviewBadge, vertical, onTime, onMarker, activeMarkerId },
   ref
 ) {
   const t = useTranslations('fbShare')
@@ -162,7 +164,10 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
           {/* track at the bottom, comment markers on their own row above it */}
           <div className="absolute inset-x-0 top-[31px] h-1 rounded-full bg-muted" />
           <div className="absolute left-0 top-[31px] h-1 rounded-full bg-primary" style={{ width: `${pct}%` }} />
-          {markers.map((m) => (
+          {markers.map((m) => {
+            // Highlight the clicked marker and the one the playhead is currently on
+            const active = m.id === activeMarkerId || Math.abs(time - m.seconds) < 0.5
+            return (
             <button
               key={m.id}
               type="button"
@@ -171,12 +176,14 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
               onKeyDown={(e) => e.stopPropagation()}
               title={m.label}
               aria-label={m.label}
-              className={`absolute top-0 -ml-[11px] flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-background text-[9px] font-bold text-white shadow-sm before:absolute before:-inset-2 before:content-[''] ${m.studio ? 'bg-primary' : 'bg-violet-600'}`}
+              aria-pressed={active}
+              className={`absolute top-0 -ml-[11px] flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 text-[9px] font-bold text-white shadow-sm transition-transform before:absolute before:-inset-2 before:content-[''] ${m.studio ? 'bg-primary' : 'bg-violet-600'} ${active ? 'z-10 scale-125 border-white ring-2 ring-primary' : 'border-background'}`}
               style={{ left: `${duration > 0 ? (m.seconds / duration) * 100 : 0}%` }}
             >
               {m.count > 1 ? m.count : m.label.slice(0, 2)}
             </button>
-          ))}
+            )
+          })}
           <div className="absolute top-[25px] -ml-2 h-4 w-4 rounded-full bg-white shadow ring-4 ring-primary/20" style={{ left: `${pct}%` }} />
         </div>
         <button type="button" onClick={() => setMuted((m) => !m)} aria-label={muted ? t('unmute') : t('mute')} className="hidden h-10 w-10 items-center justify-center rounded-lg hover:bg-muted sm:flex">

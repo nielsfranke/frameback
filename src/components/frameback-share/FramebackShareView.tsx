@@ -161,8 +161,16 @@ export default function FramebackShareView({
     const recipient = project.recipients?.find((r: any) => r.id === project.authenticatedRecipientId)
     const initial = stored || authenticatedName || recipient?.name || ''
     setName(initial)
-    if (!stored) setWelcome(true)
-  }, [nameKey, authenticatedName, project.recipients, project.authenticatedRecipientId])
+    // Welcome steps follow the project setting "Kunden-Tutorial anzeigen"; shown once per device
+    let seen = false
+    try { seen = localStorage.getItem(`fb:welcome:${slug}`) === '1' } catch { /* ignore */ }
+    if (project.showClientTutorial !== false && !seen) setWelcome(true)
+  }, [nameKey, slug, authenticatedName, project.recipients, project.authenticatedRecipientId, project.showClientTutorial])
+  const closeWelcome = () => {
+    if (name.trim()) saveName(name)
+    try { localStorage.setItem(`fb:welcome:${slug}`, '1') } catch { /* ignore */ }
+    setWelcome(false)
+  }
   const saveName = (value: string) => {
     const v = value.trim()
     setName(v)
@@ -194,15 +202,29 @@ export default function FramebackShareView({
       const k = Math.floor(c.seconds)
       bySecond.set(k, [...(bySecond.get(k) ?? []), c])
     }
-    return [...bySecond.entries()].map(([s, list]) => ({
+    return [...bySecond.values()].map((list) => ({
       id: list[0].id,
-      seconds: s,
+      seconds: list[0].seconds, // exact, so marker and playhead line up after a jump
       label: list.length > 1 ? `${list.length} ${t('comments')}` : initials(list[0].authorName),
       count: list.length,
       studio: list[0].isInternal,
     }))
   }, [versionComments, t])
   const commentCountFor = (videoId: string) => comments.filter((c) => c.videoId === videoId && !c.deleted).length
+
+  // Names people already used in this project (recipients + client comment authors), for a quick pick
+  const knownNames = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of project.recipients ?? []) if (r?.name) set.add(String(r.name).trim())
+    const walk = (list: ShareComment[]) => list.forEach((c) => {
+      if (!c.isInternal && !c.deleted && c.authorName) set.add(c.authorName.trim())
+      if (c.replies) walk(c.replies)
+    })
+    walk(comments)
+    set.delete('')
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [project.recipients, comments])
+  const [editingName, setEditingName] = useState(false)
 
   const [tab, setTab] = useState<'comments' | 'files'>('comments')
   const [draft, setDraft] = useState<Record<string, string>>({})
@@ -219,6 +241,8 @@ export default function FramebackShareView({
     const raw = draft[draftKey] || ''
     const content = raw.trim()
     if (!content || !selected || sendingRef.current) return
+    if (!name.trim()) { setEditingName(true); setTimeout(() => document.getElementById('fb-composer-name')?.focus(), 0); return }
+    saveName(name)
     sendingRef.current = true
     setPosting(true)
     try {
@@ -542,6 +566,7 @@ export default function FramebackShareView({
               vertical={!!selected.height && !!selected.width && selected.height > selected.width}
               onTime={setTime}
               onMarker={(id) => { const c = versionComments.find((x) => x.id === id); if (c) jumpTo(c) }}
+              activeMarkerId={highlight}
             />
           ) : (
             <div className="flex aspect-video max-h-[62vh] items-center justify-center rounded-xl bg-muted text-sm text-muted-foreground">{t('loading')}</div>
@@ -602,6 +627,38 @@ export default function FramebackShareView({
               {feedback && !isOld && (
                 <div className="border-t p-3.5 pb-6">
                   {canRequestChanges && <p className="mb-2 text-xs text-muted-foreground">{t('composerHint')}</p>}
+                  {/* Name: required for the first comment, remembered on this device */}
+                  {!name.trim() || editingName ? (
+                    <div className="mb-2">
+                      <label htmlFor="fb-composer-name" className="text-xs font-semibold">{t('yourName')}</label>
+                      <Input
+                        id="fb-composer-name"
+                        className="mt-1 h-9"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        onBlur={() => { if (name.trim()) { saveName(name); setEditingName(false) } }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { e.preventDefault(); saveName(name); setEditingName(false); document.getElementById('fb-composer')?.focus() } }}
+                        list="fb-known-names"
+                        autoComplete="name"
+                        placeholder={t('namePlaceholder')}
+                        required
+                      />
+                      {knownNames.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5" aria-label={t('knownNames')}>
+                          {knownNames.slice(0, 6).map((n) => (
+                            <button key={n} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { saveName(n); setEditingName(false); document.getElementById('fb-composer')?.focus() }}
+                              className="rounded-full border bg-muted px-2.5 py-1 text-xs font-medium hover:bg-primary-visible hover:text-primary">{n}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mb-1.5 text-xs text-muted-foreground">
+                      {t('commentingAs')} <b className="text-foreground">{name}</b>{' '}
+                      <button type="button" className="underline hover:text-foreground" onClick={() => setEditingName(true)}>{t('change')}</button>
+                    </p>
+                  )}
+                  <datalist id="fb-known-names">{knownNames.map((n) => <option key={n} value={n} />)}</datalist>
                   <Textarea
                     id="fb-composer"
                     value={draft[draftKey] || ''}
@@ -669,7 +726,7 @@ export default function FramebackShareView({
       </div>
 
       {/* dialogs */}
-      <Dialog open={welcome} onOpenChange={(o) => { if (!o) { saveName(name); setWelcome(false) } }}>
+      <Dialog open={welcome} onOpenChange={(o) => { if (!o) closeWelcome() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t('welcomeTitle')}</DialogTitle>
@@ -680,11 +737,11 @@ export default function FramebackShareView({
             <li><b className="text-foreground">{t('step2')}</b> {t('step2Text')}</li>
             <li><b className="text-foreground">{t('step3')}</b> {t('step3Text')}</li>
           </ol>
-          <label htmlFor="fb-name" className="text-sm font-semibold">{t('yourName')}</label>
+          <label htmlFor="fb-name" className="text-sm font-semibold">{t('yourName')} <span className="font-normal text-muted-foreground">({t('optionalNow')})</span></label>
           <p className="-mt-1 text-xs text-muted-foreground">{t('nameHint')}</p>
-          <Input id="fb-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          <Input id="fb-name" value={name} onChange={(e) => setName(e.target.value)} list="fb-known-names" autoComplete="name" />
           <p className="text-xs text-muted-foreground">{t('noAccount')}</p>
-          <DialogFooter><Button onClick={() => { saveName(name); setWelcome(false) }}>{t('start')}</Button></DialogFooter>
+          <DialogFooter><Button onClick={closeWelcome}>{t('start')}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

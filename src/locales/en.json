@@ -2589,6 +2589,11 @@
     "zipLimit": "The ZIP contains the first 50 files. Download others individually.",
     "addComment": "Add a comment",
     "commentSentCollect": "Comment saved. When you're done: “Request changes”.",
-    "nameHint": "Shown with your comments so the studio knows who wrote them."
+    "nameHint": "Shown with your comments so the studio knows who wrote them.",
+    "optionalNow": "you can also add it later",
+    "namePlaceholder": "e.g. Anna Keller",
+    "knownNames": "Names already used",
+    "commentingAs": "Commenting as",
+    "change": "change"
   }
 }

@@ -4,9 +4,12 @@ import { requireApiAdmin } from './auth'
 import { rateLimit } from './rate-limit'
 import { FolderError } from './folders'
 import { logError } from './logging'
+import { features } from './features'
 
 /** Same-origin (for writes), admin session and a per-route rate limit. */
 export async function adminGuard(request: NextRequest, name: string, maxPerMinute = 60, write = true) {
+  // studio-v2 endpoints only exist while the feature is switched on
+  if (!features.studioV2) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (write) {
     const crossOrigin = rejectCrossOrigin(request)
     if (crossOrigin) return crossOrigin

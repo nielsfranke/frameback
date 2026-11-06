@@ -7,7 +7,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const body = z.object({
-  items: z.array(z.object({ id: z.string().min(1).max(64), status: z.enum(['IN_REVIEW', 'APPROVED', 'SHARE_ONLY']).optional() })).min(1).max(500),
+  items: z.array(z.object({ id: z.string().min(1).max(64), status: z.enum(['IN_REVIEW', 'APPROVED', 'SHARE_ONLY']).optional(), stamp: z.string().datetime().optional() })).min(1).max(500),
 })
 
 // POST /api/projects/restore { items: [{ id, status? }] } – un-archive, optionally to the earlier status (admin)

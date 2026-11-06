@@ -321,7 +321,11 @@ export default function AdminSidebar() {
             aria-label={t('closeMenu')}
             tabIndex={-1}
           />
-          <div className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-border/50 bg-card shadow-elevation-lg">
+          <div
+            className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-border/50 bg-card shadow-elevation-lg"
+            // views/folders only change the query string, so close on any link click too
+            onClick={(e) => { if ((e.target as HTMLElement).closest('a[href]')) setDrawerOpen(false) }}
+          >
             <button
               onClick={() => setDrawerOpen(false)}
               className="absolute right-2 top-3.5 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"

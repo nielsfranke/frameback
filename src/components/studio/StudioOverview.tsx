@@ -138,6 +138,8 @@ function Inner() {
   const [moving, setMoving] = useState<string[] | null>(null)
   const [renaming, setRenaming] = useState(false)
   const viewKey = JSON.stringify(view)
+  // coming back from a project page (created, renamed, deleted …): fetch fresh rows
+  useEffect(() => { void reload() }, [reload])
   // a selection never outlives the list it was made in
   useEffect(() => { setSel(new Set()) }, [viewKey, q])
 

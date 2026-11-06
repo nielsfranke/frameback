@@ -31,9 +31,9 @@ export function useStudioActions() {
 
   const archive = useCallback(async (projectIds: string[]) => {
     try {
-      const { previous } = await apiPost<{ previous: Record<string, string> }>('/api/projects/archive', { projectIds })
+      const { previous, stamps } = await apiPost<{ previous: Record<string, string>; stamps: Record<string, string> }>('/api/projects/archive', { projectIds })
       await reload()
-      const items = Object.entries(previous).map(([id, status]) => ({ id, status }))
+      const items = Object.entries(previous).map(([id, status]) => ({ id, status, stamp: stamps[id] }))
       toast(t('archived', { n: items.length }), items.length ? async () => {
         try { await apiPost('/api/projects/restore', { items }); await reload(); toast(t('undone')) } catch { fail() }
       } : undefined)

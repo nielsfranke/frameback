@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export interface MenuItem {
   label: string
@@ -19,21 +20,44 @@ export function Menu({ label, trigger, items, align = 'right', className = '' }:
   className?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<React.CSSProperties>({})
   const root = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLDivElement>(null)
   const btn = useRef<HTMLButtonElement>(null)
+  // rendered in a portal with fixed position, so scroll/overflow containers never clip it
+  useLayoutEffect(() => {
+    if (!open || !btn.current) return
+    const place = () => {
+      const r = btn.current!.getBoundingClientRect()
+      const h = list.current?.offsetHeight ?? 240
+      const up = r.bottom + h + 8 > window.innerHeight && r.top > h + 8
+      setPos({
+        position: 'fixed',
+        top: up ? r.top - h - 4 : r.bottom + 4,
+        ...(align === 'right' ? { right: Math.max(8, window.innerWidth - r.right) } : { left: Math.max(8, r.left) }),
+      })
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+  }, [open, align])
   useEffect(() => {
     if (!open) return
-    const onDown = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false) }
+    const onDown = (e: MouseEvent) => {
+      const n = e.target as Node
+      if (!root.current?.contains(n) && !list.current?.contains(n)) setOpen(false)
+    }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus() } }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
-    root.current?.querySelector<HTMLButtonElement>('[role=menuitem]')?.focus()
+    list.current?.querySelector<HTMLButtonElement>('[role=menuitem]')?.focus()
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
     e.preventDefault()
-    const all = [...(root.current?.querySelectorAll<HTMLButtonElement>('[role=menuitem]') ?? [])]
+    const all = [...(list.current?.querySelectorAll<HTMLButtonElement>('[role=menuitem]') ?? [])]
     const i = all.indexOf(document.activeElement as HTMLButtonElement)
     all[(i + (e.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length]?.focus()
   }
@@ -50,11 +74,15 @@ export function Menu({ label, trigger, items, align = 'right', className = '' }:
       >
         {trigger}
       </button>
-      {open && (
+      {open && createPortal(
         <div
+          ref={list}
           role="menu"
+          aria-label={label}
           onKeyDown={onListKey}
-          className={`absolute top-full z-50 mt-1 min-w-[210px] rounded-xl border border-border bg-card p-1.5 shadow-elevation-lg ${align === 'right' ? 'right-0' : 'left-0'}`}
+          onClick={(e) => e.stopPropagation()}
+          style={pos}
+          className="z-[80] min-w-[210px] rounded-xl border border-border bg-card p-1.5 shadow-elevation-lg"
         >
           {items.map((it, i) => (
             <div key={i}>
@@ -70,7 +98,8 @@ export function Menu({ label, trigger, items, align = 'right', className = '' }:
               </button>
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

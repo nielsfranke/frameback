@@ -126,6 +126,8 @@ model Project {
   folderId        String?
   folder          Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
   folderChangedAt DateTime?
+  /// move batch that last placed the project; undo only reverts while this still matches
+  folderBatchId   String?
   folderMoves     FolderMoveItem[]
 
   videos            Video[]

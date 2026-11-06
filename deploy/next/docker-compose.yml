@@ -79,6 +79,7 @@ services:
       # Frameback feature flags (default off)
       FEATURE_REVIEW_FLOW: ${FEATURE_REVIEW_FLOW:-false}
       FEATURE_NEW_SHARE: ${FEATURE_NEW_SHARE:-false}
+      FEATURE_STUDIO_V2: ${FEATURE_STUDIO_V2:-false}
     volumes:
       - uploads:/app/uploads
     networks: [internal]

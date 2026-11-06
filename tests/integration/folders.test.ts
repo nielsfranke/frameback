@@ -106,6 +106,17 @@ describe('move + undo', () => {
 })
 
 describe('archive', () => {
+  it('an old archive undo cannot undo a later archive', async () => {
+    const { project } = await makeProject()
+    const first = await archiveProjects([project.id])
+    await restoreProjects([{ id: project.id }])
+    await new Promise((res) => setTimeout(res, 5))
+    await archiveProjects([project.id])
+    const r = await restoreProjects([{ id: project.id, status: first.previous[project.id], stamp: first.stamps[project.id] }])
+    expect(r.restored).toBe(0)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).status).toBe('ARCHIVED')
+  })
+
   it('archiving keeps the earlier status for a lossless restore', async () => {
     const { project } = await makeProject()
     await prisma.project.update({ where: { id: project.id }, data: { status: 'APPROVED', approvedAt: new Date() } })

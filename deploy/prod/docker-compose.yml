@@ -75,6 +75,7 @@ services:
       NEXT_PUBLIC_SOURCE_CODE_URL: ${NEXT_PUBLIC_SOURCE_CODE_URL:-}
       FEATURE_REVIEW_FLOW: ${FEATURE_REVIEW_FLOW:-false}
       FEATURE_NEW_SHARE: ${FEATURE_NEW_SHARE:-false}
+      FEATURE_STUDIO_V2: ${FEATURE_STUDIO_V2:-false}
     ports:
       - "${APP_PORT:-4324}:4321"
     volumes:

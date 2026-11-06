@@ -131,6 +131,7 @@ export async function projectSummaries(userId: string): Promise<ProjectSummary[]
     list.push(v)
     byProject.set(v.projectId, list)
   }
+  // sortOrder 0 = not positioned yet (video-order assigns 1..n): goes last, like in the share view
   const position = (v: (typeof videos)[number]) => v.group?.sortOrder || Number.MAX_SAFE_INTEGER
 
   return projects.map((p) => {

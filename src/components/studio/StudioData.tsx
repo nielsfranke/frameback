@@ -22,24 +22,29 @@ export function StudioDataProvider({ enabled, children }: { enabled: boolean; ch
   const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState(false)
   const inflight = useRef<Promise<void> | null>(null)
+  const dirty = useRef(false)
 
-  const reload = useCallback(async () => {
+  // A reload requested while one is running (e.g. right after a mutation) must not be
+  // satisfied by the older response: mark dirty and fetch once more afterwards.
+  const reload = useCallback(async (): Promise<void> => {
     if (!enabled) return
-    if (inflight.current) return inflight.current
+    if (inflight.current) { dirty.current = true; return inflight.current }
     inflight.current = (async () => {
-      try {
-        const res = await apiFetch('/api/studio/projects', { cache: 'no-store' })
-        if (!res.ok) throw new Error(String(res.status))
-        const data = await res.json()
-        setProjects(data.projects)
-        setFolders(data.folders)
-        setError(false)
-      } catch {
-        setError(true)
-      } finally {
-        setLoading(false)
-        inflight.current = null
-      }
+      do {
+        dirty.current = false
+        try {
+          const res = await apiFetch('/api/studio/projects', { cache: 'no-store' })
+          if (!res.ok) throw new Error(String(res.status))
+          const data = await res.json()
+          setProjects(data.projects)
+          setFolders(data.folders)
+          setError(false)
+        } catch {
+          setError(true)
+        }
+      } while (dirty.current)
+      setLoading(false)
+      inflight.current = null
     })()
     return inflight.current
   }, [enabled])

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Folder, FolderPlus } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -20,9 +20,11 @@ export function FolderNameDialog({ open, onOpenChange, initial = '', onSubmit, t
   const t = useTranslations('studio')
   const [name, setName] = useState(initial)
   const [busy, setBusy] = useState(false)
+  // reset whenever the dialog opens or targets another folder
+  useEffect(() => { if (open) setName(initial) }, [open, initial])
   const valid = name.trim().length > 0 && name.trim().length <= 80
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (o) setName(initial) }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

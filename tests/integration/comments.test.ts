@@ -147,3 +147,29 @@ describe('codex review fixes (comments)', () => {
     }
   })
 })
+
+describe('edit by name (any device, no codes)', () => {
+  it('same name on another device may edit; the previous text is kept as a revision', async () => {
+    const { project, v } = await setup()
+    const c = await prisma.comment.create({ data: { projectId: project.id, videoId: v.id, timecode: '00:00:05:00', content: 'Alt', authorName: 'Anna Keller', authorKeyHash: annaHash } })
+    // phone: different browser key, same name (case/whitespace insensitive)
+    await editComment({ commentId: c.id, content: 'Neu', actor: { kind: 'client', viewerKeyHash: hashViewerKey(KEY_B), name: '  anna   keller ' }, projectId: project.id })
+    const revs = await prisma.commentRevision.findMany({ where: { commentId: c.id } })
+    expect(revs.map((r) => r.content)).toEqual(['Alt'])
+    expect(revs[0].editorName).toBe('anna keller')
+  })
+
+  it('a colleague on the same link with another name cannot edit or delete', async () => {
+    const { project, v } = await setup()
+    const c = await prisma.comment.create({ data: { projectId: project.id, videoId: v.id, timecode: '00:00:05:00', content: 'Annas Kommentar', authorName: 'Anna Keller', authorKeyHash: annaHash } })
+    const marco = { kind: 'client' as const, viewerKeyHash: hashViewerKey(KEY_B), name: 'Marco Rossi' }
+    await expectCode(editComment({ commentId: c.id, content: 'x', actor: marco, projectId: project.id }), 'FORBIDDEN')
+    await expectCode(softDeleteComment({ commentId: c.id, actor: marco, projectId: project.id }), 'FORBIDDEN')
+  })
+
+  it('studio comments are never editable by name', async () => {
+    const { project, studio } = await setup()
+    await prisma.comment.update({ where: { id: studio.id }, data: { authorName: 'Anna Keller' } })
+    await expectCode(editComment({ commentId: studio.id, content: 'x', actor: { kind: 'client', viewerKeyHash: null, name: 'Anna Keller' }, projectId: project.id }), 'FORBIDDEN')
+  })
+})

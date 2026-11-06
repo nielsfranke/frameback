@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getCurrentUserFromRequest } from '@/lib/auth'
 import { verifyProjectAccess } from '@/lib/project-access'
 import { viewerHashFrom } from '@/lib/comment-ownership'
+import { sanitizeAndValidateContent } from '@/lib/comment-helpers'
 import type { CommentActor } from '@/lib/comment-mutations'
 
 /**
@@ -38,6 +39,14 @@ export async function resolveCommentActor(
       ? access.errorResponse!
       : NextResponse.json({ error: 'Comment not found' }, { status: 404 })
   }
-  return { actor: { kind: 'client', viewerKeyHash: viewerHashFrom(request) }, projectId: project.id }
+  // The commenter's name (header, URI-encoded) enables editing own comments on any device.
+  // It is sanitized like stored author names, so the comparison matches what is saved.
+  let name: string | null = null
+  try { name = decodeURIComponent(request.headers.get('x-commenter-name') ?? '') || null } catch { name = null }
+  if (name) {
+    const v = await sanitizeAndValidateContent({ content: '.', authorName: name.slice(0, 100) })
+    name = v.valid ? v.sanitizedAuthorName ?? null : null
+  }
+  return { actor: { kind: 'client', viewerKeyHash: viewerHashFrom(request), name }, projectId: project.id }
 }
 

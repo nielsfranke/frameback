@@ -188,12 +188,19 @@ export default function FramebackShareView({
   useEffect(() => { void loadComments() }, [loadComments])
 
   const fps = selected?.fps || 24
+  // Editable: written in this browser (server flag) or carrying my name (any device)
+  const myName = name.replace(/\s+/g, ' ').trim().toLowerCase()
+  const withRights = useCallback((c: ShareComment): ShareComment => ({
+    ...c,
+    canEdit: !c.deleted && (!!c.canEdit || (!c.isInternal && !!myName && toPlainText(c.authorName || '').replace(/\s+/g, ' ').trim().toLowerCase() === myName)),
+    replies: c.replies?.map((r) => withRights(r)),
+  }), [myName])
   const versionComments = useMemo(
     () => comments
       .filter((c) => c.videoId === selected?.id)
-      .map((c) => ({ ...c, seconds: c.timecode ? timecodeToSeconds(c.timecode, fps) : 0 }))
+      .map((c) => ({ ...withRights(c), seconds: c.timecode ? timecodeToSeconds(c.timecode, fps) : 0 }))
       .sort((a, b) => a.seconds - b.seconds),
-    [comments, selected?.id, fps]
+    [comments, selected?.id, fps, withRights]
   )
   const markers: Marker[] = useMemo(() => {
     const bySecond = new Map<number, typeof versionComments>()
@@ -273,7 +280,12 @@ export default function FramebackShareView({
   }
 
   const mutate = async (url: string, method: string, body?: unknown) => {
-    const res = await fetch(url, { method, headers: authHeaders(shareToken, !!body), body: body ? JSON.stringify(body) : undefined })
+    const res = await fetch(url, {
+      method,
+      // The name lets people edit their comments on any device (server checks it)
+      headers: { ...authHeaders(shareToken, !!body), ...(name.trim() ? { 'X-Commenter-Name': encodeURIComponent(name.trim()) } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    })
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('failed'))
   }
   const saveEdit = async () => {

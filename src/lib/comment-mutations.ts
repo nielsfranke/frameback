@@ -1,11 +1,15 @@
 /**
  * Frameback: edit, soft-delete and restore comments (docs/redesign/PLAN.md §3.4).
  *
- * Who may change a comment:
+ * Who may change a comment (deliberately simple – no codes, no accounts):
  *  - an admin: any comment
- *  - a client: only own client comments, proven by the vt_viewer browser key
- *    (comment.authorKeyHash === sha256(key)); the route additionally requires share
- *    access to the project with the 'comment' permission.
+ *  - a client (share access with 'comment' permission to the comment's project):
+ *    client comments written in this browser (vt_viewer key) OR carrying the same name.
+ *    The name makes editing work across devices (PC today, phone tomorrow). Without
+ *    accounts a name is no proof of identity – but anyone with the link could already
+ *    post under any name; the safety net is: studio comments are never editable by
+ *    clients, every edit keeps the previous text (CommentRevision), deletes are soft
+ *    and restorable, edits are marked.
  * Deleting is always a soft delete. A deleted comment with studio replies remains as a
  * placeholder (see applySoftDelete); the author or an admin can restore it.
  */
@@ -14,7 +18,7 @@ import { cancelCommentNotification, sanitizeAndValidateContent } from './comment
 
 export type CommentActor =
   | { kind: 'admin'; userId: string }
-  | { kind: 'client'; viewerKeyHash: string | null }
+  | { kind: 'client'; viewerKeyHash: string | null; name?: string | null }
 
 export class CommentMutationError extends Error {
   constructor(public code: 'NOT_FOUND' | 'FORBIDDEN' | 'DELETED' | 'NOT_DELETED' | 'INVALID', message: string, public status = 400) {
@@ -24,20 +28,38 @@ export class CommentMutationError extends Error {
 }
 
 /** Ownership as a write filter, so the check holds at the moment of writing. */
-const ownerFilter = (actor: CommentActor) =>
-  actor.kind === 'admin' ? {} : { isInternal: false, authorKeyHash: actor.viewerKeyHash ?? '__none__' }
+/** Names are compared trimmed, whitespace-collapsed and case-insensitive. */
+export const normalizeName = (name?: string | null) => (name ?? '').replace(/\s+/g, ' ').trim().slice(0, 100)
+
+const ownerFilter = (actor: CommentActor) => {
+  if (actor.kind === 'admin') return {}
+  const or: Array<Record<string, unknown>> = [{ authorKeyHash: actor.viewerKeyHash ?? '__none__' }]
+  const name = normalizeName(actor.name)
+  if (name) or.push({ authorName: { equals: name, mode: 'insensitive' } })
+  return { isInternal: false, OR: or }
+}
+
+export function ownsComment(
+  actor: { viewerKeyHash?: string | null; name?: string | null },
+  c: { isInternal?: boolean; authorKeyHash?: string | null; authorName?: string | null }
+) {
+  if (c.isInternal) return false
+  if (actor.viewerKeyHash && c.authorKeyHash === actor.viewerKeyHash) return true
+  const name = normalizeName(actor.name)
+  return !!name && normalizeName(c.authorName).toLowerCase() === name.toLowerCase()
+}
 
 async function loadOwned(commentId: string, actor: CommentActor, projectId?: string) {
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
-    select: { id: true, projectId: true, isInternal: true, authorKeyHash: true, deletedAt: true, deletedBy: true },
+    select: { id: true, projectId: true, isInternal: true, authorKeyHash: true, authorName: true, deletedAt: true, deletedBy: true },
   })
   // Same answer for "missing" and "other project": no probing of comment ids across shares.
   if (!comment || (projectId && comment.projectId !== projectId)) {
     throw new CommentMutationError('NOT_FOUND', 'Comment not found', 404)
   }
   if (actor.kind === 'client') {
-    const own = !comment.isInternal && !!actor.viewerKeyHash && comment.authorKeyHash === actor.viewerKeyHash
+    const own = ownsComment(actor, comment)
     if (!own) throw new CommentMutationError('FORBIDDEN', 'You can only change your own comments', 403)
   }
   return comment
@@ -49,12 +71,25 @@ export async function editComment(params: { commentId: string; content: string; 
   if (!params.content?.trim()) throw new CommentMutationError('INVALID', 'Comment must not be empty')
   const validated = await sanitizeAndValidateContent({ content: params.content })
   if (!validated.valid) throw new CommentMutationError('INVALID', validated.error || 'Invalid content', validated.errorStatus || 400)
-  // Conditional write: still not deleted and still owned (no check-then-write race)
-  const res = await prisma.comment.updateMany({
-    where: { id: comment.id, deletedAt: null, ...ownerFilter(params.actor) },
-    data: { content: validated.sanitizedContent!, editedAt: new Date() },
+  // Conditional write (still not deleted, still owned) and the previous text kept, atomically
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.comment.findUnique({ where: { id: comment.id }, select: { content: true } })
+    const res = await tx.comment.updateMany({
+      where: { id: comment.id, deletedAt: null, ...ownerFilter(params.actor) },
+      data: { content: validated.sanitizedContent!, editedAt: new Date() },
+    })
+    if (res.count !== 1 || !before) throw new CommentMutationError('DELETED', 'Comment was deleted or changed meanwhile', 409)
+    if (before.content !== validated.sanitizedContent) {
+      await tx.commentRevision.create({
+        data: {
+          commentId: comment.id,
+          content: before.content,
+          editedBy: params.actor.kind === 'admin' ? params.actor.userId : 'client',
+          editorName: params.actor.kind === 'client' ? normalizeName(params.actor.name) || null : null,
+        },
+      })
+    }
   })
-  if (res.count !== 1) throw new CommentMutationError('DELETED', 'Comment was deleted or changed meanwhile', 409)
   return prisma.comment.findUniqueOrThrow({ where: { id: comment.id }, select: { id: true, content: true, editedAt: true } })
 }
 

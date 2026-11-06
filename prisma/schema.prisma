@@ -306,6 +306,20 @@ model ReviewDecision {
   @@index([requestId])
 }
 
+/// Previous versions of an edited comment. Clients can edit comments carrying their name
+/// (no accounts), so every edit keeps the old text: the studio can always look up and revert.
+model CommentRevision {
+  id         String   @id @default(cuid())
+  commentId  String
+  comment    Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  content    String // text BEFORE the edit
+  editedBy   String // "client" | admin user id
+  editorName String?
+  createdAt  DateTime @default(now())
+
+  @@index([commentId])
+}
+
 /// Comments handed over with "Änderungen anfordern" (text snapshot for the audit trail).
 model ReviewDecisionComment {
   decisionId   String
@@ -471,9 +485,10 @@ model Comment {
   parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies  Comment[] @relation("CommentReplies")
 
-  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  video   Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  assets  VideoAsset[]
+  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  video     Video             @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  assets    VideoAsset[]
+  revisions CommentRevision[]
 
   @@index([projectId])
   @@index([videoId])

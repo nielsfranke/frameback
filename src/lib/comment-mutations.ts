@@ -31,19 +31,24 @@ export class CommentMutationError extends Error {
 /** Names are compared trimmed, whitespace-collapsed and case-insensitive. */
 export const normalizeName = (name?: string | null) => (name ?? '').replace(/\s+/g, ' ').trim().slice(0, 100)
 
-const ownerFilter = (actor: CommentActor) => {
+/**
+ * Ownership as a write filter. `storedName` is the comment's own authorName after
+ * loadOwned() verified it matches the actor's name (same normalization as ownsComment),
+ * so SQL and JS can never disagree about whitespace.
+ */
+const ownerFilter = (actor: CommentActor, storedName?: string | null) => {
   if (actor.kind === 'admin') return {}
   const or: Array<Record<string, unknown>> = [{ authorKeyHash: actor.viewerKeyHash ?? '__none__' }]
-  const name = normalizeName(actor.name)
-  if (name) or.push({ authorName: { equals: name, mode: 'insensitive' } })
-  return { isInternal: false, OR: or }
+  if (storedName && ownsComment({ name: actor.name }, { authorName: storedName })) or.push({ authorName: storedName })
+  // never studio comments: neither marked internal nor written by a studio user
+  return { isInternal: false, userId: null, OR: or }
 }
 
 export function ownsComment(
   actor: { viewerKeyHash?: string | null; name?: string | null },
-  c: { isInternal?: boolean; authorKeyHash?: string | null; authorName?: string | null }
+  c: { isInternal?: boolean; userId?: string | null; authorKeyHash?: string | null; authorName?: string | null }
 ) {
-  if (c.isInternal) return false
+  if (c.isInternal || c.userId) return false
   if (actor.viewerKeyHash && c.authorKeyHash === actor.viewerKeyHash) return true
   const name = normalizeName(actor.name)
   return !!name && normalizeName(c.authorName).toLowerCase() === name.toLowerCase()
@@ -52,7 +57,7 @@ export function ownsComment(
 async function loadOwned(commentId: string, actor: CommentActor, projectId?: string) {
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
-    select: { id: true, projectId: true, isInternal: true, authorKeyHash: true, authorName: true, deletedAt: true, deletedBy: true },
+    select: { id: true, projectId: true, isInternal: true, userId: true, authorKeyHash: true, authorName: true, deletedAt: true, deletedBy: true },
   })
   // Same answer for "missing" and "other project": no probing of comment ids across shares.
   if (!comment || (projectId && comment.projectId !== projectId)) {
@@ -73,9 +78,11 @@ export async function editComment(params: { commentId: string; content: string; 
   if (!validated.valid) throw new CommentMutationError('INVALID', validated.error || 'Invalid content', validated.errorStatus || 400)
   // Conditional write (still not deleted, still owned) and the previous text kept, atomically
   await prisma.$transaction(async (tx) => {
+    // Lock the row first: concurrent edits then serialize and every replaced text is archived
+    await tx.$queryRaw`SELECT "id" FROM "Comment" WHERE "id" = ${comment.id} FOR UPDATE`
     const before = await tx.comment.findUnique({ where: { id: comment.id }, select: { content: true } })
     const res = await tx.comment.updateMany({
-      where: { id: comment.id, deletedAt: null, ...ownerFilter(params.actor) },
+      where: { id: comment.id, deletedAt: null, ...ownerFilter(params.actor, comment.authorName) },
       data: { content: validated.sanitizedContent!, editedAt: new Date() },
     })
     if (res.count !== 1 || !before) throw new CommentMutationError('DELETED', 'Comment was deleted or changed meanwhile', 409)
@@ -96,7 +103,7 @@ export async function editComment(params: { commentId: string; content: string; 
 export async function softDeleteComment(params: { commentId: string; actor: CommentActor; projectId?: string }) {
   const comment = await loadOwned(params.commentId, params.actor, params.projectId)
   const res = await prisma.comment.updateMany({
-    where: { id: comment.id, deletedAt: null, ...ownerFilter(params.actor) },
+    where: { id: comment.id, deletedAt: null, ...ownerFilter(params.actor, comment.authorName) },
     data: { deletedAt: new Date(), deletedBy: params.actor.kind === 'admin' ? params.actor.userId : 'client' },
   })
   // Always (also on a repeated delete): a pending "new comment" email must not go out.
@@ -116,7 +123,7 @@ export async function restoreComment(params: { commentId: string; actor: Comment
     where: {
       id: comment.id,
       deletedAt: { not: null },
-      ...ownerFilter(params.actor),
+      ...ownerFilter(params.actor, comment.authorName),
       // Clients can only undo their OWN deletion, also at the moment of writing
       ...(params.actor.kind === 'client' ? { deletedBy: 'client' } : {}),
     },

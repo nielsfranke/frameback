@@ -1,4 +1,5 @@
 'use client'
+import { SOURCE_CODE_URL } from '@/lib/app-brand'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
@@ -1103,7 +1104,7 @@ export default function SharePageClient({ token, newShare = false, reviewFlow = 
               rel="noopener noreferrer"
               className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
             >
-              Powered by Frameback
+              Powered by Frameback · <a href={SOURCE_CODE_URL} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Source (AGPL-3.0)</a>
             </a>
           </div>
         </div>

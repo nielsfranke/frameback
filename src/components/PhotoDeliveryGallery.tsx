@@ -1,4 +1,5 @@
 'use client'
+import { SOURCE_CODE_URL } from '@/lib/app-brand'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
@@ -359,7 +360,7 @@ export default function PhotoDeliveryGallery({
           rel="noopener noreferrer"
           className="text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
         >
-          Powered by Frameback
+          Powered by Frameback · <a href={SOURCE_CODE_URL} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Source (AGPL-3.0)</a>
         </a>
       </footer>
 

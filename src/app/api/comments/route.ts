@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { applySoftDelete, setViewerCookie, viewerHashFrom, viewerKeyFor } from '@/lib/comment-ownership'
 import { hashViewerKey } from '@/lib/review'
+import { isOptedOut } from '@/lib/reply-notifications'
 
 class InvalidAttachmentsError extends Error {}
 import { getAuthContext } from '@/lib/auth'
@@ -332,7 +333,7 @@ export async function POST(request: NextRequest) {
             userId: authContext.user?.id || null,
             annotations: annotations || undefined,
             authorKeyHash: viewer ? hashViewerKey(viewer.key) : null,
-            notifyReplies: !isInternal && !!finalAuthorEmail && notifyReplies === true,
+            notifyReplies: !isInternal && !!finalAuthorEmail && notifyReplies === true && !(await isOptedOut(projectId, finalAuthorEmail)),
           },
           include: commentInclude,
         })

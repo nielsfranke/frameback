@@ -128,6 +128,7 @@ model Project {
   projectUploads    ProjectUpload[] // Client-submitted files via reverse share
   photoAlbums       PhotoAlbum[] // Photo gallery albums
   videoGroups       VideoGroup[] // Frameback: stable version groups
+  replyMailOptOuts  ReplyMailOptOut[] // Frameback: unsubscribed reply-mail addresses
 
   @@index([clientCompanyId])
 }
@@ -318,6 +319,18 @@ model CommentRevision {
   createdAt  DateTime @default(now())
 
   @@index([commentId])
+}
+
+/// Addresses that unsubscribed from "the studio replied" mails for a project (durable,
+/// checked right before every send; survives a Redis flush).
+model ReplyMailOptOut {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  email     String // lower-case
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, email])
 }
 
 /// Comments handed over with "Änderungen anfordern" (text snapshot for the audit trail).

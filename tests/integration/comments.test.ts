@@ -125,7 +125,8 @@ describe('codex review fixes (comments)', () => {
   it('placeholders carry no author, user or key hash', async () => {
     const { project, user, own } = await setup()
     await prisma.comment.update({ where: { id: own.id }, data: { userId: user.id, authorName: 'Anna' } })
-    await softDeleteComment({ commentId: own.id, actor: { kind: 'client', viewerKeyHash: annaHash }, projectId: project.id })
+    // userId set = studio-authored, so only an admin may delete it
+    await softDeleteComment({ commentId: own.id, actor: { kind: 'admin', userId: user.id } })
     const raw = await prisma.comment.findMany({ where: { projectId: project.id, parentId: null }, include: { replies: true, user: true } })
     const p = applySoftDelete(raw)[0] as Record<string, unknown>
     expect(p).toMatchObject({ deleted: true, content: '', authorName: null, user: null, userId: null })
@@ -171,5 +172,31 @@ describe('edit by name (any device, no codes)', () => {
     const { project, studio } = await setup()
     await prisma.comment.update({ where: { id: studio.id }, data: { authorName: 'Anna Keller' } })
     await expectCode(editComment({ commentId: studio.id, content: 'x', actor: { kind: 'client', viewerKeyHash: null, name: 'Anna Keller' }, projectId: project.id }), 'FORBIDDEN')
+  })
+})
+
+describe('codex review 12 fixes', () => {
+  it('comments written by a studio user are never editable by name, even if not marked internal', async () => {
+    const { project, user, v } = await setup()
+    const c = await prisma.comment.create({ data: { projectId: project.id, videoId: v.id, timecode: '00:00:01:00', content: 'Studio', authorName: 'Anna Keller', userId: user.id } })
+    await expectCode(editComment({ commentId: c.id, content: 'x', actor: { kind: 'client', viewerKeyHash: null, name: 'Anna Keller' }, projectId: project.id }), 'FORBIDDEN')
+  })
+
+  it('parallel edits archive every replaced version', async () => {
+    const { project, v } = await setup()
+    const c = await prisma.comment.create({ data: { projectId: project.id, videoId: v.id, timecode: '00:00:01:00', content: 'A', authorName: 'Anna Keller' } })
+    const actor = { kind: 'client' as const, viewerKeyHash: null, name: 'Anna Keller' }
+    await Promise.all(['B', 'C', 'D'].map((content) => editComment({ commentId: c.id, content, actor, projectId: project.id })))
+    const revs = (await prisma.commentRevision.findMany({ where: { commentId: c.id } })).map((r) => r.content).sort()
+    const final = (await prisma.comment.findUniqueOrThrow({ where: { id: c.id } })).content
+    // every text except the final one appears exactly once in the history
+    expect(revs).toEqual(['A', 'B', 'C', 'D'].filter((x) => x !== final).sort())
+  })
+
+  it('names with odd whitespace still match consistently (stored value used for the write)', async () => {
+    const { project, v } = await setup()
+    const c = await prisma.comment.create({ data: { projectId: project.id, videoId: v.id, timecode: '00:00:01:00', content: 'x', authorName: 'Anna   Keller' } })
+    await editComment({ commentId: c.id, content: 'y', actor: { kind: 'client', viewerKeyHash: null, name: 'anna keller' }, projectId: project.id })
+    expect((await prisma.comment.findUniqueOrThrow({ where: { id: c.id } })).content).toBe('y')
   })
 })

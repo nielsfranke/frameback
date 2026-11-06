@@ -8,7 +8,10 @@
  *    Further replies in the window send nothing – the client sees them all via the link.
  *  - nothing extra for regular project recipients with notifications on (they already get
  *    the normal comment mails)
- *  - every mail carries an unsubscribe link (signed, per project + email)
+ *  - every mail carries an unsubscribe link (signed, per project + email); opt-outs are
+ *    durable (ReplyMailOptOut) and checked right before sending
+ *  - project-wide cap: at most PROJECT_DAILY_CAP reply mails per project and day, so an
+ *    address typed in by mistake (or on purpose) cannot turn into a mailing list
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { prisma } from './db'
@@ -18,6 +21,7 @@ import { sendCommentNotificationEmail } from './email'
 import { generateShareUrl } from './url'
 import { logError, logMessage } from './logging'
 
+export const PROJECT_DAILY_CAP = 20
 const WINDOW_SECONDS: Record<string, number> = { IMMEDIATE: 15 * 60, HOURLY: 3600, DAILY: 86400, WEEKLY: 7 * 86400 }
 export const replyMailWindow = (schedule?: string | null) => WINDOW_SECONDS[schedule ?? 'HOURLY'] ?? 3600
 
@@ -67,12 +71,23 @@ export async function notifyReplyAuthor(params: {
     select: { id: true },
   })
   if (recipient) return
+  if (await isOptedOut(params.project.id, email)) return
   if (!(await isSmtpConfigured())) return
 
   // One mail per person, project and window
-  const first = await getRedis().set(`reply_mail:${params.project.id}:${email}`, '1', 'EX', replyMailWindow(params.project.clientNotificationSchedule), 'NX')
+  const redis = getRedis()
+  const throttleKey = `reply_mail:${params.project.id}:${email}`
+  const first = await redis.set(throttleKey, '1', 'EX', replyMailWindow(params.project.clientNotificationSchedule), 'NX')
   if (first !== 'OK') {
     logMessage(`[REPLY-MAIL] throttled for ${params.project.title}`)
+    return
+  }
+  // Project-wide daily cap
+  const capKey = `reply_mail_cap:${params.project.id}:${new Date().toISOString().slice(0, 10)}`
+  const count = await redis.incr(capKey)
+  if (count === 1) await redis.expire(capKey, 2 * 86400)
+  if (count > PROJECT_DAILY_CAP) {
+    logMessage(`[REPLY-MAIL] daily cap reached for ${params.project.title}`)
     return
   }
 
@@ -93,8 +108,25 @@ export async function notifyReplyAuthor(params: {
       shareUrl,
       unsubscribeUrl,
     })
-    if (!result.success) logError('[REPLY-MAIL] send failed:', result.error)
+    if (!result.success) {
+      logError('[REPLY-MAIL] send failed:', result.error)
+      await redis.del(throttleKey) // a failed send must not block the next reply mail for days
+    }
   } catch (error) {
     logError('[REPLY-MAIL] send failed:', error)
+    await redis.del(throttleKey).catch(() => {})
   }
+}
+
+export async function isOptedOut(projectId: string, email: string) {
+  return !!(await prisma.replyMailOptOut.findUnique({ where: { projectId_email: { projectId, email: email.toLowerCase() } }, select: { id: true } }))
+}
+
+/** Durable opt-out: stops reply mails for this project + address (also for future comments). */
+export async function optOut(projectId: string, email: string) {
+  const e = email.toLowerCase()
+  await prisma.$transaction([
+    prisma.replyMailOptOut.upsert({ where: { projectId_email: { projectId, email: e } }, create: { projectId, email: e }, update: {} }),
+    prisma.comment.updateMany({ where: { projectId, authorEmail: { equals: e, mode: 'insensitive' } }, data: { notifyReplies: false } }),
+  ])
 }

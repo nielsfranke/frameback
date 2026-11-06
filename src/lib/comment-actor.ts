@@ -42,7 +42,10 @@ export async function resolveCommentActor(
   // The commenter's name (header, URI-encoded) enables editing own comments on any device.
   // It is sanitized like stored author names, so the comparison matches what is saved.
   let name: string | null = null
-  try { name = decodeURIComponent(request.headers.get('x-commenter-name') ?? '') || null } catch { name = null }
+  const rawName = request.headers.get('x-commenter-name') ?? ''
+  if (rawName.length > 600) return NextResponse.json({ error: 'Name too long' }, { status: 400 })
+  try { name = decodeURIComponent(rawName) || null } catch { name = null }
+  if (name && name.length > 100) return NextResponse.json({ error: 'Name too long' }, { status: 400 })
   if (name) {
     const v = await sanitizeAndValidateContent({ content: '.', authorName: name.slice(0, 100) })
     name = v.valid ? v.sanitizedAuthorName ?? null : null

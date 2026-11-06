@@ -132,11 +132,15 @@ export default function StudioProjectPage({ id }: { id: string }) {
     })
   }, [])
 
+  // one order write at a time: sorting is locked until the server has answered
+  const [savingOrder, setSavingOrder] = useState(false)
   const sortable = useSortable(
     groups.map((g) => g.groupId),
     async (next, prev) => {
       applyOrder(next) // optimistic
+      setSavingOrder(true)
       const r = await saveOrder(next)
+      setSavingOrder(false)
       if (r !== 'ok') {
         applyOrder(prev)
         toast(r === 'conflict' ? t('orderConflict') : ts('actionFailed'))
@@ -144,7 +148,10 @@ export default function StudioProjectPage({ id }: { id: string }) {
         return
       }
       toast(t('orderSaved'), async () => {
-        if ((await saveOrder(prev)) === 'ok') { applyOrder(prev); toast(ts('undone')) } else { toast(ts('actionFailed')); void fetchProject() }
+        setSavingOrder(true)
+        const u = await saveOrder(prev)
+        setSavingOrder(false)
+        if (u === 'ok') { applyOrder(prev); toast(ts('undone')) } else { toast(ts('actionFailed')); void fetchProject() }
       })
     },
     setLive,
@@ -172,7 +179,15 @@ export default function StudioProjectPage({ id }: { id: string }) {
 
   const deleteGroup = async (g: Group) => {
     if (!window.confirm(t('deleteVideoConfirm', { name: g.name }))) return
-    try { for (const v of g.versions) await apiDelete(`/api/videos/${v.id}`); toast(t('videoDeleted')); void refresh() } catch { toast(ts('actionFailed')) }
+    let removed = 0
+    try {
+      for (const v of g.versions) { await apiDelete(`/api/videos/${v.id}`); removed++ }
+      toast(t('videoDeleted'))
+    } catch {
+      toast(removed ? t('deletePartial', { done: removed, total: g.versions.length }) : ts('actionFailed'))
+    } finally {
+      void refresh()
+    }
   }
   const withdraw = async (g: Group) => {
     if (!g.current) return
@@ -190,7 +205,7 @@ export default function StudioProjectPage({ id }: { id: string }) {
     const typed = window.prompt(t('deleteProjectPrompt', { title: project.title }))
     if (typed === null) return
     if (typed.trim() !== project.title.trim()) { toast(t('deleteProjectMismatch')); return }
-    try { await apiDelete(`/api/projects/${id}`); await reloadOverview(); router.push('/admin/projects') } catch { toast(ts('actionFailed')) }
+    try { await apiDelete(`/api/projects/${project.id}`); await reloadOverview(); router.push('/admin/projects') } catch { toast(ts('actionFailed')) }
   }
 
   return (
@@ -275,8 +290,9 @@ export default function StudioProjectPage({ id }: { id: string }) {
                     <div className="grid grid-cols-[30px_92px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[30px_112px_minmax(0,1fr)_auto] sm:pr-4">
                       <button
                         type="button"
-                        onPointerDown={sortable.onPointerDown(g.groupId)}
-                        onKeyDown={sortable.onKeyDown(g.groupId)}
+                        onPointerDown={savingOrder ? undefined : sortable.onPointerDown(g.groupId)}
+                        onKeyDown={savingOrder ? undefined : sortable.onKeyDown(g.groupId)}
+                        aria-disabled={savingOrder}
                         aria-label={t('dndHandle', { pos: i + 1, name: g.name })}
                         aria-describedby="fb-dnd-help"
                         aria-pressed={sortable.mode === 'keyboard' && isActive}
@@ -298,9 +314,10 @@ export default function StudioProjectPage({ id }: { id: string }) {
                         </button>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted-foreground">
                           {cur ? <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${chip[g.state]}`}>{t(`state.${g.state}`)}</span>
-                            : <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold">{t('processing')}</span>}
+                            : g.pending?.status === 'ERROR' ? <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">{t('failed')}</span>
+                              : <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold">{t('processing')}</span>}
                           {cur && <span className="tabular-nums">v{cur.version} · {format.dateTime(new Date(cur.createdAt), { day: '2-digit', month: '2-digit' })}</span>}
-                          {g.pending && <span className="text-foreground">{g.pending.status === 'ERROR' ? t('pendingError', { version: g.pending.version }) : t('pending', { version: g.pending.version, current: cur ? `v${cur.version}` : '–' })}</span>}
+                          {g.pending && cur && <span className={g.pending.status === 'ERROR' ? 'text-destructive' : 'text-foreground'}>{g.pending.status === 'ERROR' ? t('pendingError', { version: g.pending.version }) : t('pending', { version: g.pending.version, current: cur ? `v${cur.version}` : '–' })}</span>}
                           {(open > 0 || fresh > 0) && (
                             <span className="inline-flex items-center gap-1 font-medium text-foreground">
                               <MessageSquare className="h-3.5 w-3.5" />{t('openN', { n: open })}

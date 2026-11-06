@@ -2701,6 +2701,8 @@
         "changes": "Changes requested",
         "approved": "Approved"
       },
+      "failed": "Processing failed",
+      "deletePartial": "{done} of {total} versions deleted – the rest could not be deleted.",
       "processing": "Processing …",
       "pending": "v{version} is processing – the client sees {current} until then",
       "pendingError": "v{version}: processing failed",

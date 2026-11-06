@@ -2775,6 +2775,8 @@
         "changes": "Änderungen gewünscht",
         "approved": "Freigegeben"
       },
+      "failed": "Verarbeitung fehlgeschlagen",
+      "deletePartial": "{done} von {total} Versionen gelöscht – der Rest konnte nicht gelöscht werden.",
       "processing": "Wird verarbeitet …",
       "pending": "v{version} wird verarbeitet – Kunde sieht bis dahin {current}",
       "pendingError": "v{version}: Verarbeitung fehlgeschlagen",

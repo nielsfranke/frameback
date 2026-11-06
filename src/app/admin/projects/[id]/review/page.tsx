@@ -13,5 +13,5 @@ export default function StudioReviewPage() {
   // the studio player only exists with the new studio; otherwise back to the project
   useEffect(() => { if (!studioV2) router.replace(`/admin/projects/${id}`) }, [studioV2, id, router])
   if (!studioV2) return null
-  return <Suspense fallback={null}><StudioReview projectId={id} /></Suspense>
+  return <Suspense fallback={null}><StudioReview key={id} projectId={id} /></Suspense>
 }

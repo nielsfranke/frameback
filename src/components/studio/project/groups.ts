@@ -42,7 +42,7 @@ export interface Group {
   versions: AdminVideo[]
   /** highest READY version: what the client sees */
   current: AdminVideo | null
-  /** newer upload that is not ready yet */
+  /** newer upload that is not ready yet (or failed processing) */
   pending: AdminVideo | null
   state: GroupState
 }
@@ -55,7 +55,8 @@ export function buildGroups(videos: AdminVideo[]): Group[] {
   const groups = [...by.entries()].map(([groupId, list]) => {
     const versions = [...list].sort((a, b) => b.version - a.version)
     const current = versions.find((v) => v.status === 'READY') ?? null
-    const pending = versions[0] && versions[0] !== current && versions[0].status !== 'ERROR' ? versions[0] : null
+    // newest upload that is not the current one: still processing, or failed
+    const pending = versions[0] && versions[0] !== current ? versions[0] : null
     return {
       groupId,
       name: versions[0].name,

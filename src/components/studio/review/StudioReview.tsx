@@ -63,7 +63,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
   const [active, setActive] = useState<string | null>(null)
   const [replyTo, setReplyTo] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
-  const [text, setText] = useState('')
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [pinned, setPinned] = useState<number | null>(null)
   const [time, setTime] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -85,6 +85,11 @@ export default function StudioReview({ projectId }: { projectId: string }) {
     if (r.ok) setUnread(new Set((await r.json()).unreadIds))
   }, [projectId])
   useEffect(() => { void loadProject(); void loadComments(); void loadUnread() }, [loadProject, loadComments, loadUnread])
+  useEffect(() => {
+    if (!project?.videos?.some((v: AdminVideo) => v.status === 'PROCESSING' || v.status === 'UPLOADING')) return
+    const iv = setInterval(() => void loadProject(), 5000)
+    return () => clearInterval(iv)
+  }, [project?.videos, loadProject])
 
   const groups = useMemo(() => buildGroups((project?.videos ?? []) as AdminVideo[]), [project?.videos])
   const group = groups.find((g) => g.groupId === sp?.get('video')) ?? groups[0]
@@ -93,6 +98,9 @@ export default function StudioReview({ projectId }: { projectId: string }) {
   const video = readyVersions.find((v) => v.version === wanted) ?? group?.current ?? null
   const isOld = !!video && !!group?.current && video.version < group.current.version
   const fps = video?.fps || 24
+  // a draft belongs to the video version it was written for
+  const text = video ? drafts[video.id] ?? '' : ''
+  const setText = (v: string) => { if (video) setDrafts((d) => ({ ...d, [video.id]: v })) }
 
   const go = (groupId: string, version?: number) => {
     const q = new URLSearchParams({ video: groupId })
@@ -157,20 +165,25 @@ export default function StudioReview({ projectId }: { projectId: string }) {
     }, 400)
   }, [unread, reloadOverview])
   const listRef = useRef<HTMLDivElement>(null)
+  const markSeenRef = useRef(markSeen)
+  useEffect(() => { markSeenRef.current = markSeen }, [markSeen])
+  // stable key of what is rendered, so playback re-renders don't restart the observer
+  const shownKey = shown.map((c) => [c.id, ...(c.replies ?? []).map((r) => r.id)].join('+')).join(',')
   useEffect(() => {
     const root = listRef.current
     if (!root) return
     const timers = new Map<Element, ReturnType<typeof setTimeout>>()
+    // each comment and each reply is observed on its own: seen = itself visible for a second
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
-        const ids = (e.target as HTMLElement).dataset.seen?.split(',').filter(Boolean) ?? []
+        const id = (e.target as HTMLElement).dataset.seen
         clearTimeout(timers.get(e.target))
-        if (e.isIntersecting && ids.length) timers.set(e.target, setTimeout(() => markSeen(ids), 1000))
+        if (id && e.isIntersecting && e.intersectionRatio >= 0.6) timers.set(e.target, setTimeout(() => markSeenRef.current([id]), 1000))
       }
-    }, { root: window.matchMedia('(min-width: 1024px)').matches ? root : null, threshold: 0.6 })
+    }, { root: window.matchMedia('(min-width: 1024px)').matches ? root : null, threshold: [0, 0.6, 1] })
     root.querySelectorAll('[data-seen]').forEach((el) => io.observe(el))
     return () => { io.disconnect(); timers.forEach(clearTimeout) }
-  }, [shown, markSeen])
+  }, [shownKey])
 
   const seek = (c: { id: string; seconds: number }) => {
     player.current?.seek(c.seconds); player.current?.pause(); setActive(c.id)
@@ -182,16 +195,23 @@ export default function StudioReview({ projectId }: { projectId: string }) {
     setTimeout(() => document.getElementById(`c-${id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50)
   }
 
-  const resolve = async (c: C, resolved: boolean) => {
-    const apply = (r: boolean) => setComments((list) => list.map((x) => (x.id === c.id ? { ...x, resolvedAt: r ? new Date().toISOString() : null } : x)))
-    apply(resolved)
+  // one resolve request per thread at a time; the UI follows what the server confirmed
+  const [resolving, setResolving] = useState<Set<string>>(new Set())
+  const setResolvedOnServer = async (id: string, resolved: boolean) => {
+    setResolving((s) => new Set(s).add(id))
     try {
-      await apiPost(`/api/studio/comments/${c.id}/resolve`, { resolved })
-      markSeen([c.id, ...(c.replies ?? []).map((r) => r.id)])
-      toast(resolved ? t('markedDone') : t('reopened'), async () => {
-        try { await apiPost(`/api/studio/comments/${c.id}/resolve`, { resolved: !resolved }); apply(!resolved) } catch { toast(ts('actionFailed')) }
-      })
-    } catch { apply(!resolved); toast(ts('actionFailed')) }
+      const r = await apiPost<{ resolvedAt: string | null }>(`/api/studio/comments/${id}/resolve`, { resolved })
+      setComments((list) => list.map((x) => (x.id === id ? { ...x, resolvedAt: r.resolvedAt } : x)))
+      return true
+    } catch { toast(ts('actionFailed')); return false } finally {
+      setResolving((s) => { const n = new Set(s); n.delete(id); return n })
+    }
+  }
+  const resolve = async (c: C, resolved: boolean) => {
+    if (resolving.has(c.id)) return
+    if (!(await setResolvedOnServer(c.id, resolved))) return
+    markSeen([c.id])
+    toast(resolved ? t('markedDone') : t('reopened'), async () => { await setResolvedOnServer(c.id, !resolved) })
   }
 
   const post = async (body: Record<string, unknown>) => {
@@ -211,7 +231,10 @@ export default function StudioReview({ projectId }: { projectId: string }) {
   const sendComment = async () => {
     if (!text.trim()) return
     const at = pinned ?? player.current?.currentTime() ?? 0
-    if (await post({ timecode: secondsToTimecode(at, fps), content: text.trim() })) { setText(''); setPinned(null); setFilter('all') }
+    const forVideo = video!.id
+    if (await post({ timecode: secondsToTimecode(at, fps), content: text.trim() })) {
+      setDrafts((d) => ({ ...d, [forVideo]: '' })); setPinned(null); setFilter('all')
+    }
   }
 
   if (!project) return <div className="flex flex-1 items-center justify-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
@@ -229,9 +252,9 @@ export default function StudioReview({ projectId }: { projectId: string }) {
     const name = c.authorName || (isClient(c) ? t('client') : t('studio'))
     const isUnread = unread.has(c.id) || (c.replies ?? []).some((r) => unread.has(r.id))
     return (
-      <div key={c.id} id={`c-${c.id}`} data-seen={[c.id, ...(c.replies ?? []).map((r) => r.id)].join(',')}
+      <div key={c.id} id={`c-${c.id}`}
         className={`mb-2 rounded-xl border p-3 transition-colors ${active === c.id ? 'border-primary/50 bg-primary/5' : 'border-transparent hover:bg-background/60'}`}>
-        <div className="flex items-center gap-2 text-[13px]">
+        <div data-seen={c.id} className="flex items-center gap-2 text-[13px]">
           <span className="grid h-[26px] w-[26px] flex-none place-items-center rounded-full text-[10.5px] font-bold text-white" style={{ background: isClient(c) ? colorFor(name) : '#334155' }}>{initials(name)}</span>
           <b className="font-semibold">{name}</b>
           {!isClient(c) && <span className="rounded bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">{t('studio')}</span>}
@@ -246,7 +269,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
         {(c.replies ?? []).filter((r) => !r.deleted).map((r) => {
           const rn = r.authorName || (isClient(r) ? t('client') : t('studio'))
           return (
-            <div key={r.id} className="ml-[34px] mt-2.5 border-l-2 border-border pl-3">
+            <div key={r.id} data-seen={r.id} className="ml-[34px] mt-2.5 border-l-2 border-border pl-3">
               <div className="flex items-center gap-2 text-[13px]">
                 <b className="font-semibold">{rn}</b>
                 {!isClient(r) && <span className="rounded bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">{t('studio')}</span>}
@@ -259,7 +282,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
         })}
         {replyTo === c.id && (
           <form className="ml-[34px] mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void sendReply(c) }}>
-            <input autoFocus value={replyText} onChange={(e) => setReplyText(e.target.value)} aria-label={t('replyTo', { name })} placeholder={t('replyTo', { name })}
+            <input autoFocus value={replyText} readOnly={busy} onChange={(e) => setReplyText(e.target.value)} aria-label={t('replyTo', { name })} placeholder={t('replyTo', { name })}
               className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm" />
             <Button type="submit" size="sm" disabled={busy || !replyText.trim()} aria-label={t('sendReply')}><Send className="h-4 w-4" /></Button>
           </form>
@@ -267,8 +290,8 @@ export default function StudioReview({ projectId }: { projectId: string }) {
         <div className="ml-7 mt-1.5 flex gap-1">
           <button type="button" onClick={() => { setReplyTo(replyTo === c.id ? null : c.id); setReplyText('') }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"><CornerUpLeft className="h-3.5 w-3.5" />{t('reply')}</button>
           {!isClient(c) ? null : c.resolvedAt
-            ? <button type="button" onClick={() => resolve(c, false)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"><RotateCcw className="h-3.5 w-3.5" />{t('reopen')}</button>
-            : <button type="button" onClick={() => resolve(c, true)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-success hover:bg-accent"><Check className="h-3.5 w-3.5" />{t('markDone')}</button>}
+            ? <button type="button" disabled={resolving.has(c.id)} onClick={() => resolve(c, false)} className="disabled:opacity-50 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"><RotateCcw className="h-3.5 w-3.5" />{t('reopen')}</button>
+            : <button type="button" disabled={resolving.has(c.id)} onClick={() => resolve(c, true)} className="disabled:opacity-50 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-success hover:bg-accent"><Check className="h-3.5 w-3.5" />{t('markDone')}</button>}
         </div>
       </div>
     )
@@ -357,7 +380,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
         </div>
         <form className="sticky bottom-0 border-t border-border bg-card px-4 pb-4 pt-3" onSubmit={(e) => { e.preventDefault(); void sendComment() }}>
           <label htmlFor="fb-studio-comment" className="mb-1 block text-xs text-muted-foreground">{t('composerLabel')}</label>
-          <Textarea id="fb-studio-comment" rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('composerPlaceholder')}
+          <Textarea id="fb-studio-comment" rows={2} value={text} readOnly={busy} onChange={(e) => setText(e.target.value)} placeholder={t('composerPlaceholder')}
             onFocus={() => { player.current?.pause(); if (pinned === null) setPinned(player.current?.currentTime() ?? 0) }} />
           <div className="mt-2 flex items-center justify-between">
             <span className="inline-flex h-7 items-center gap-1 rounded-md bg-primary/10 px-2 text-xs font-semibold tabular-nums text-primary"><Clock className="h-3 w-3" />{t('at', { time: formatSeconds(pinned ?? time) })}</span>

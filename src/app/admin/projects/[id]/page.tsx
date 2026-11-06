@@ -24,7 +24,7 @@ const SECTIONS_COLLAPSED_KEY = 'vitransfer-admin-project-sections-collapsed'
 export default function ProjectPageSwitch() {
   const { studioV2 } = useFeatures()
   const params = useParams()
-  return studioV2 ? <StudioProjectPage id={params?.id as string} /> : <ProjectPage />
+  return studioV2 ? <StudioProjectPage key={params?.id as string} id={params?.id as string} /> : <ProjectPage />
 }
 
 function ProjectPage() {

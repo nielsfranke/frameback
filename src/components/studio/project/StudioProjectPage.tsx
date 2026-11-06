@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useFormatter, useTranslations } from 'next-intl'
+import { useFormatter, useNow, useTranslations } from 'next-intl'
 import {
   AlertTriangle, Archive, BarChart3, Check, ChevronDown, ChevronUp, Clock, Download, GripVertical, Images, Loader2,
   MessageSquare, MoreHorizontal, Pencil, Send, Settings, Trash2, Undo2, Upload, Video,
@@ -35,6 +35,7 @@ export default function StudioProjectPage({ id }: { id: string }) {
   const t = useTranslations('studio.project')
   const ts = useTranslations('studio')
   const format = useFormatter()
+  const now = useNow({ updateInterval: 60_000 })
   const router = useRouter()
   const toast = useToast()
   const { reload: reloadOverview } = useStudioData()
@@ -392,7 +393,7 @@ export default function StudioProjectPage({ id }: { id: string }) {
                 return (
                   <li key={i} className="grid grid-cols-[22px_1fr] gap-2.5 text-[13px] leading-snug">
                     <span className={`mt-0.5 grid h-[22px] w-[22px] place-items-center rounded-full ${tone}`}><Icon className="h-3 w-3" /></span>
-                    <span>{text}<time className="block text-xs text-muted-foreground" dateTime={a.at}>{format.relativeTime(new Date(a.at))}</time></span>
+                    <span>{text}<time className="block text-xs text-muted-foreground" dateTime={a.at}>{format.relativeTime(new Date(a.at), now)}</time></span>
                   </li>
                 )
               })}

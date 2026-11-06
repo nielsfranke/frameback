@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+import { useFeatures } from '@/components/FeaturesProvider'
+import StudioClients from '@/components/studio/clients/StudioClients'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,7 +31,12 @@ interface ClientCompany {
   }
 }
 
-export default function ClientsPage() {
+export default function ClientsPageSwitch() {
+  const { studioV2 } = useFeatures()
+  return studioV2 ? <StudioClients /> : <ClientsPage />
+}
+
+function ClientsPage() {
   const t = useTranslations('clients')
   const tc = useTranslations('common')
   const [companies, setCompanies] = useState<ClientCompany[]>([])

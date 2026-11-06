@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useFormatter, useTranslations } from 'next-intl'
+import { useFormatter, useNow, useTranslations } from 'next-intl'
 import DOMPurify from 'isomorphic-dompurify'
 import { AlertTriangle, Check, ChevronDown, ChevronLeft, Clock, CornerUpLeft, Loader2, RotateCcw, Send, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
   const tp = useTranslations('studio.project')
   const ts = useTranslations('studio')
   const format = useFormatter()
+  const now = useNow({ updateInterval: 60_000 })
   const sp = useSearchParams()
   const router = useRouter()
   const toast = useToast()
@@ -258,7 +259,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
           <span className="grid h-[26px] w-[26px] flex-none place-items-center rounded-full text-[10.5px] font-bold text-white" style={{ background: isClient(c) ? colorFor(name) : '#334155' }}>{initials(name)}</span>
           <b className="font-semibold">{name}</b>
           {!isClient(c) && <span className="rounded bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">{t('studio')}</span>}
-          <time className="text-xs text-muted-foreground" dateTime={c.createdAt}>{format.relativeTime(new Date(c.createdAt))}</time>
+          <time className="text-xs text-muted-foreground" dateTime={c.createdAt}>{format.relativeTime(new Date(c.createdAt), now)}</time>
           {isUnread && <span className="ml-auto h-[7px] w-[7px] flex-none rounded-full bg-primary" aria-label={t('unread')} />}
         </div>
         <button type="button" onClick={() => seek(c)} className="ml-[34px] mt-1.5 inline-flex h-[22px] items-center gap-1 rounded-md bg-primary/10 px-1.5 text-xs font-semibold tabular-nums text-primary">
@@ -273,7 +274,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
               <div className="flex items-center gap-2 text-[13px]">
                 <b className="font-semibold">{rn}</b>
                 {!isClient(r) && <span className="rounded bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">{t('studio')}</span>}
-                <time className="text-xs text-muted-foreground" dateTime={r.createdAt}>{format.relativeTime(new Date(r.createdAt))}</time>
+                <time className="text-xs text-muted-foreground" dateTime={r.createdAt}>{format.relativeTime(new Date(r.createdAt), now)}</time>
                 {unread.has(r.id) && <span className="ml-auto h-[7px] w-[7px] rounded-full bg-primary" aria-label={t('unread')} />}
               </div>
               <div className="mt-1 whitespace-pre-wrap break-words text-[13.5px]" dangerouslySetInnerHTML={{ __html: safeHtml(r.content) }} />

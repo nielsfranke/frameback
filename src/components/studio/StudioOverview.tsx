@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useFormatter, useTranslations } from 'next-intl'
+import { useFormatter, useNow, useTranslations } from 'next-intl'
 import { Archive, ArchiveRestore, Eye, Folder, FolderInput, Link2, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Trash2, Video, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import { useToast } from './Toast'
 import { Menu } from './Menu'
 import { FolderNameDialog, MoveDialog } from './FolderDialogs'
 import { rememberView } from './StudioNav'
+import SortByClient from './SortByClient'
 import { clientName, DRAG_TYPE, inView, matchesQuery, viewFromParams, type StudioProject, type View } from './views'
 
 type Sort = 'activity' | 'name' | 'due'
@@ -37,6 +38,7 @@ function Progress({ p }: { p: StudioProject }) {
 function LastActivity({ p }: { p: StudioProject }) {
   const t = useTranslations('studio')
   const format = useFormatter()
+  const now = useNow({ updateInterval: 60_000 })
   const a = p.last
   if (!a) return null
   const who = (s: string) => <b className="font-medium text-foreground">{s || t('someone')}</b>
@@ -53,21 +55,24 @@ function LastActivity({ p }: { p: StudioProject }) {
         {p.unread > 0 && <span className="mr-1.5 inline-block rounded-full bg-primary px-1.5 text-[11px] font-bold leading-[17px] text-primary-foreground">{t('newN', { n: p.unread })}</span>}
         {text}
       </div>
-      <time dateTime={a.at}>{format.relativeTime(new Date(a.at))}</time>
+      <time dateTime={a.at}>{format.relativeTime(new Date(a.at), now)}</time>
     </div>
   )
 }
 
-function Row({ p, view, selected, selection, onToggle, onMove }: {
+export function Row({ p, view, selected = false, selection = [], onToggle, onMove, showClient = true }: {
   p: StudioProject
   view: View
-  selected: boolean
-  selection: string[]
-  onToggle: () => void
+  selected?: boolean
+  selection?: string[]
+  /** without it the row has no checkbox */
+  onToggle?: () => void
   onMove: (ids: string[]) => void
+  showClient?: boolean
 }) {
   const t = useTranslations('studio')
   const format = useFormatter()
+  const now = useNow({ updateInterval: 60_000 })
   const router = useRouter()
   const toast = useToast()
   const { archive, restore } = useStudioActions()
@@ -85,7 +90,7 @@ function Row({ p, view, selected, selection, onToggle, onMove }: {
       onClick={(e) => { if (!(e.target as HTMLElement).closest('a,button,input')) open() }}
       className={`grid cursor-pointer grid-cols-[22px_72px_minmax(0,1fr)_32px] items-center gap-x-3 gap-y-1 border-t border-border px-3 py-2.5 first:border-t-0 hover:bg-background/50 md:grid-cols-[22px_88px_minmax(0,1fr)_200px_32px] xl:grid-cols-[22px_88px_minmax(0,1fr)_210px_250px_32px] ${selected ? 'bg-primary/10' : ''}`}
     >
-      <input type="checkbox" checked={selected} onChange={onToggle} aria-label={t('selectProject', { title: p.title })} className="h-4 w-4 cursor-pointer accent-primary" />
+      {onToggle ? <input type="checkbox" checked={selected} onChange={onToggle} aria-label={t('selectProject', { title: p.title })} className="h-4 w-4 cursor-pointer accent-primary" /> : <span />}
       <div className="aspect-video w-[72px] overflow-hidden rounded-md bg-muted md:w-[88px]">
         {p.thumbnailUrl
           // eslint-disable-next-line @next/next/no-img-element
@@ -98,7 +103,7 @@ function Row({ p, view, selected, selection, onToggle, onMove }: {
           {p.title}
         </Link>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 text-[12.5px] text-muted-foreground">
-          <span>{client ?? t('noClient')}</span>
+          {showClient && <span>{client ?? t('noClient')}</span>}
           {p.folder && view.kind !== 'folder' && p.folder.name !== client && <span className="inline-flex items-center gap-1"><Folder className="h-3 w-3" />{p.folder.name}</span>}
           {p.dueDate && <span>{t('due', { date: format.dateTime(new Date(p.dueDate), { day: 'numeric', month: 'short' }) })}</span>}
           {p.archived && <span className="rounded bg-muted px-1.5 text-[11px] font-semibold">{t('archivedBadge')}</span>}
@@ -186,7 +191,7 @@ function Inner() {
             ]}
           />
         )}
-        <Button asChild className="ml-auto"><Link href="/admin/projects/new"><Plus className="mr-1.5 h-4 w-4" />{t('newProject')}</Link></Button>
+        <Button asChild className="ml-auto"><Link href={view.kind === 'folder' ? `/admin/projects/new?folder=${view.id}` : '/admin/projects/new'}><Plus className="mr-1.5 h-4 w-4" />{t('newProject')}</Link></Button>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -201,6 +206,7 @@ function Inner() {
         </select>
       </div>
       {q.trim() && <p className="mb-2 text-xs font-semibold text-muted-foreground">{t('searchScope')}</p>}
+      {!q.trim() && (view.kind === 'all' || view.kind === 'nofolder') && !loading && <SortByClient />}
 
       {error ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm">

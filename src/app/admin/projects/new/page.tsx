@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useFeatures } from '@/components/FeaturesProvider'
+import { useStudioData } from '@/components/studio/StudioData'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +21,12 @@ import { generateSecurePassword } from '@/lib/password-utils'
 export default function NewProjectPage() {
   const router = useRouter()
   const t = useTranslations('projects')
+  const ts = useTranslations('studio')
+  const { studioV2 } = useFeatures()
+  const { folders } = useStudioData()
+  // studio: folder for the new project (suggested from the client, always changeable)
+  const [folderId, setFolderId] = useState<string>('')
+  const [folderTouched, setFolderTouched] = useState(false)
   const tc = useTranslations('common')
   const [loading, setLoading] = useState(false)
   const [isShareOnly, setIsShareOnly] = useState(false)
@@ -40,6 +48,31 @@ export default function NewProjectPage() {
   const [clientCompanyId, setClientCompanyId] = useState<string | null>(null)
   const [recipientName, setRecipientName] = useState('')
   const [recipientEmail, setRecipientEmail] = useState('')
+
+  // a folder with exactly the client's name is suggested (unless the user picked one)
+  const suggestedFolder = (() => {
+    const key = companyName.replace(/\s+/g, ' ').trim().toLocaleLowerCase()
+    const hits = key ? folders.filter((f) => f.name.toLocaleLowerCase() === key) : []
+    return hits.length === 1 ? hits[0] : null
+  })()
+  useEffect(() => {
+    if (!studioV2 || folderTouched) return
+    setFolderId(suggestedFolder?.id ?? '')
+  }, [studioV2, folderTouched, suggestedFolder?.id])
+  // prefill from ?client=<id> (client page) or ?folder=<id> (folder view)
+  useEffect(() => {
+    if (!studioV2) return
+    const sp = new URLSearchParams(window.location.search)
+    const folder = sp.get('folder')
+    if (folder) { setFolderId(folder); setFolderTouched(true) }
+    const client = sp.get('client')
+    if (client) {
+      apiFetch(`/api/clients/${client}`).then((r) => (r.ok ? r.json() : null)).then((d) => {
+        const c = d?.company
+        if (c?.id && c?.name) { setCompanyName(c.name); setClientCompanyId(c.id) }
+      }).catch(() => {})
+    }
+  }, [studioV2])
 
   // Generate password on mount
   useEffect(() => {
@@ -101,6 +134,10 @@ export default function NewProjectPage() {
 
     try {
       const project = await apiPost('/api/projects', data)
+      if (studioV2 && folderId) {
+        // a failed move only leaves the project unfiled; never block the creation
+        await apiPost('/api/folders/move', { projectIds: [project.id], folderId }).catch(() => {})
+      }
       router.push(`/admin/projects/${project.id}`)
     } catch (error) {
       alert(t('failedToCreateProject'))
@@ -157,6 +194,24 @@ export default function NewProjectPage() {
                 onRecipientEmailChange={setRecipientEmail}
                 disabled={loading}
               />
+
+              {studioV2 && (
+                <div className="space-y-2">
+                  <Label htmlFor="folderId">{ts('folder')}</Label>
+                  <select
+                    id="folderId"
+                    value={folderId}
+                    onChange={(e) => { setFolderId(e.target.value); setFolderTouched(true) }}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">{ts('noFolder')}</option>
+                    {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                  {suggestedFolder && folderId === suggestedFolder.id && (
+                    <p className="text-xs text-muted-foreground">{ts('folderSuggested', { client: companyName })}</p>
+                  )}
+                </div>
+              )}
 
               {/* Due Date */}
               <div className="space-y-3">

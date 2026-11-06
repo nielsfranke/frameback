@@ -988,3 +988,14 @@ model StudioCommentSeen {
   @@id([userId, commentId])
   @@index([commentId])
 }
+
+/// Frameback: "merge" / "keep separate" on a duplicate client suggestion (aId < bId).
+/// No foreign keys: a merged-away client is deleted, the decision stays as history.
+model ClientMergeDecision {
+  aId       String
+  bId       String
+  decision  String
+  decidedAt DateTime @default(now())
+
+  @@id([aId, bId])
+}

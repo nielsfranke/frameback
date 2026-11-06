@@ -40,22 +40,27 @@ describe('backfill', () => {
     expect(plan.filter((i) => i.action === 'create').map((i) => i.projectId).sort()).toEqual([b.id, c.id].sort())
     expect(plan.some((i) => i.projectId === d.id || i.projectId === e.id)).toBe(false)
 
-    const r = await applyClientBackfill(ids)
+    const r = await applyClientBackfill(plan)
     expect(r.linked).toBe(3)
     const created = await prisma.clientCompany.findMany({ where: { name: name('Neukunde GmbH') } })
     expect(created).toHaveLength(1)
     expect((await prisma.project.findUniqueOrThrow({ where: { id: b.id } })).clientCompanyId).toBe(created[0].id)
     expect((await prisma.project.findUniqueOrThrow({ where: { id: d.id } })).clientCompanyId).toBe(other.id)
 
-    const again = await applyClientBackfill(ids)
+    const again = await applyClientBackfill(plan)
     expect(again.linked).toBe(0)
     expect(await prisma.clientCompany.count({ where: { name: name('Neukunde GmbH') } })).toBe(1)
   })
 
-  it('only touches the previewed projects', async () => {
+  it('only touches the previewed projects, and skips ones whose name changed since', async () => {
     const a = await projectFor(name('Vorschau'))
     const b = await projectFor(name('Vorschau'))
-    await applyClientBackfill([a.id])
+    const c = await projectFor(name('Alt'))
+    const plan = mine((await planClientBackfill()).items, [a.id, c.id])
+    await prisma.project.update({ where: { id: c.id }, data: { companyName: name('Neu') } })
+    const r = await applyClientBackfill(plan)
+    expect(r).toMatchObject({ linked: 1, skipped: 1 })
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: c.id } })).clientCompanyId).toBeNull()
     expect((await prisma.project.findUniqueOrThrow({ where: { id: b.id } })).clientCompanyId).toBeNull()
   })
 
@@ -87,6 +92,15 @@ describe('duplicates and merge', () => {
     expect((await prisma.project.findUniqueOrThrow({ where: { id: p.id } })).clientCompanyId).toBe(big.id)
     expect(await prisma.clientCompany.findUnique({ where: { id: small.id } })).toBeNull()
     expect(await prisma.clientContact.count({ where: { companyId: big.id } })).toBe(2)
+  })
+
+  it('"keep separate" survives a merge of one side', async () => {
+    const a = await prisma.clientCompany.create({ data: { name: name('Alpen Hotel') } })
+    const c = await prisma.clientCompany.create({ data: { name: name('Alpen Hotels') } })
+    const b = await prisma.clientCompany.create({ data: { name: name('Alpen-Hotel AG') } })
+    await keepSeparate(a.id, c.id)
+    await mergeClients(a.id, b.id)
+    expect((await duplicateSuggestions()).some((x) => [x.a.id, x.b.id].includes(b.id) && [x.a.id, x.b.id].includes(c.id))).toBe(false)
   })
 
   it('"keep separate" is remembered', async () => {

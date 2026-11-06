@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useFeatures } from '@/components/FeaturesProvider'
 import { useStudioData } from '@/components/studio/StudioData'
+import { useToast } from '@/components/studio/Toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +23,7 @@ export default function NewProjectPage() {
   const router = useRouter()
   const t = useTranslations('projects')
   const ts = useTranslations('studio')
+  const toast = useToast()
   const { studioV2 } = useFeatures()
   const { folders } = useStudioData()
   // studio: folder for the new project (suggested from the client, always changeable)
@@ -69,7 +71,10 @@ export default function NewProjectPage() {
     if (client) {
       apiFetch(`/api/clients/${client}`).then((r) => (r.ok ? r.json() : null)).then((d) => {
         const c = d?.company
-        if (c?.id && c?.name) { setCompanyName(c.name); setClientCompanyId(c.id) }
+        // only while the client field is still untouched
+        if (c?.id && c?.name) {
+          setCompanyName((cur) => { if (cur) return cur; setClientCompanyId(c.id); return c.name })
+        }
       }).catch(() => {})
     }
   }, [studioV2])
@@ -135,8 +140,8 @@ export default function NewProjectPage() {
     try {
       const project = await apiPost('/api/projects', data)
       if (studioV2 && folderId) {
-        // a failed move only leaves the project unfiled; never block the creation
-        await apiPost('/api/folders/move', { projectIds: [project.id], folderId }).catch(() => {})
+        // the project exists either way; a failed move is reported, not swallowed
+        try { await apiPost('/api/folders/move', { projectIds: [project.id], folderId }) } catch { toast(ts('folderMoveFailed')) }
       }
       router.push(`/admin/projects/${project.id}`)
     } catch (error) {

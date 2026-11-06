@@ -71,35 +71,46 @@ export async function planClientBackfill(): Promise<BackfillPlan> {
   return plan
 }
 
+/** What the user saw in the preview for one project (confirmed as-is or skipped). */
+export interface ConfirmedItem { projectId: string; companyName: string; clientId?: string; clientName: string }
+
 /**
- * Apply the backfill. Only projects listed in `onlyProjectIds` (the previewed set) are
- * touched, and only while they still have no client – a second run changes nothing.
+ * Apply the backfill for exactly the previewed assignments. A project is linked only if
+ * it still has no client, its company name is still the previewed one, and the target
+ * is still unambiguous – otherwise it is skipped as a conflict. A second run changes nothing.
+ * Without `confirmed` (CLI) the current plan is applied.
  */
-export async function applyClientBackfill(onlyProjectIds?: string[]) {
+export async function applyClientBackfill(confirmed?: ConfirmedItem[]) {
   const plan = await planClientBackfill()
-  const allowed = onlyProjectIds ? new Set(onlyProjectIds) : null
-  const items = plan.items.filter((i) => !allowed || allowed.has(i.projectId))
-  const log: Array<BackfillItem & { result: 'linked' | 'skipped' }> = []
+  const items: ConfirmedItem[] = confirmed ?? plan.items
+  const log: Array<ConfirmedItem & { result: 'linked' | 'skipped'; clientId?: string }> = []
   let created = 0
   await prisma.$transaction(async (tx) => {
-    const ids = new Map<string, string>() // nameKey -> client id (created in this run)
     for (const it of items) {
-      let clientId = it.clientId
-      if (!clientId) {
-        const key = nameKey(it.clientName)
-        clientId = ids.get(key)
-        if (!clientId) {
-          // unique name: a concurrent run that created it first wins, we reuse it
-          const c = await tx.clientCompany.upsert({ where: { name: it.clientName }, update: {}, create: { name: it.clientName }, select: { id: true, createdAt: true } })
-          clientId = c.id
-          ids.set(key, clientId)
-          created++
-        }
+      const [p] = await tx.$queryRaw<Array<{ companyName: string | null; clientCompanyId: string | null }>>`
+        SELECT "companyName", "clientCompanyId" FROM "Project" WHERE id = ${it.projectId} FOR UPDATE`
+      if (!p || p.clientCompanyId || !p.companyName || nameKey(p.companyName) !== nameKey(it.companyName)) {
+        log.push({ ...it, result: 'skipped' }); continue
       }
-      const r = await tx.project.updateMany({ where: { id: it.projectId, clientCompanyId: null }, data: { clientCompanyId: clientId } })
-      log.push({ ...it, clientId, result: r.count ? 'linked' : 'skipped' })
+      const key = nameKey(it.clientName)
+      // one find-or-create per normalized name at a time (other backfill runs wait here)
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'frameback-client:' + key}))`
+      const same = (await tx.clientCompany.findMany({ select: { id: true, name: true } })).filter((c) => nameKey(c.name) === key)
+      let clientId: string | undefined
+      if (it.clientId) {
+        // previewed as "link to existing": it must still be the only match
+        clientId = same.length === 1 && same[0].id === it.clientId ? it.clientId : undefined
+      } else if (same.length === 1) {
+        clientId = same[0].id // created meanwhile (or earlier in this run): reuse
+      } else if (same.length === 0) {
+        clientId = (await tx.clientCompany.create({ data: { name: it.clientName }, select: { id: true } })).id
+        created++
+      }
+      if (!clientId) { log.push({ ...it, result: 'skipped' }); continue }
+      await tx.project.update({ where: { id: it.projectId }, data: { clientCompanyId: clientId } })
+      log.push({ ...it, clientId, result: 'linked' })
     }
-  }, { timeout: 60_000 })
+  }, { timeout: 120_000 })
   return { linked: log.filter((l) => l.result === 'linked').length, skipped: log.filter((l) => l.result === 'skipped').length, clientsCreated: created, ambiguous: plan.ambiguous, log }
 }
 
@@ -156,6 +167,14 @@ export async function mergeClients(sourceId: string, targetId: string) {
       await tx.clientContact.update({ where: { id: c.id }, data: { companyId: targetId } })
       if (mail) targetMails.add(mail)
       moved++
+    }
+    // "keep separate" decisions of the source now apply to the surviving client
+    const old = await tx.clientMergeDecision.findMany({ where: { OR: [{ aId: sourceId }, { bId: sourceId }], decision: 'KEEP_SEPARATE' } })
+    for (const d of old) {
+      const other = d.aId === sourceId ? d.bId : d.aId
+      if (other === targetId) continue
+      const [a, b] = pairKey(targetId, other)
+      await tx.clientMergeDecision.upsert({ where: { aId_bId: { aId: a, bId: b } }, update: {}, create: { aId: a, bId: b, decision: 'KEEP_SEPARATE' } })
     }
     await tx.clientCompany.delete({ where: { id: sourceId } })
     const [x, y] = pairKey(sourceId, targetId)

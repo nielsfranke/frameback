@@ -19,16 +19,23 @@ export async function GET(request: NextRequest) {
   }
 }
 
-const body = z.object({ projectIds: z.array(z.string().min(1).max(64)).min(1).max(5000) })
+const body = z.object({
+  items: z.array(z.object({
+    projectId: z.string().min(1).max(64),
+    companyName: z.string().min(1).max(500),
+    clientId: z.string().min(1).max(64).optional(),
+    clientName: z.string().min(1).max(500),
+  })).min(1).max(1000),
+})
 
-// POST /api/studio/clients/backfill { projectIds } – apply exactly the previewed set (admin)
+// POST /api/studio/clients/backfill { items } – apply exactly the previewed assignments, in chunks (admin)
 export async function POST(request: NextRequest) {
   const admin = await adminGuard(request, 'studio-clients-write', 10)
   if (admin instanceof Response) return admin
   const parsed = body.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   try {
-    const r = await applyClientBackfill(parsed.data.projectIds)
+    const r = await applyClientBackfill(parsed.data.items)
     logMessage(`[CLIENTS] backfill by ${admin.email}: ${r.linked} linked, ${r.clientsCreated} clients created, ${r.skipped} skipped`)
     return NextResponse.json({ linked: r.linked, skipped: r.skipped, clientsCreated: r.clientsCreated })
   } catch (e) {

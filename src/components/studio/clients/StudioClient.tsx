@@ -31,14 +31,18 @@ export default function StudioClient({ id }: { id: string }) {
   const { projects, reload: reloadOverview } = useStudioData()
   const [detail, setDetail] = useState<Detail | null>(null)
   const [missing, setMissing] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [moving, setMoving] = useState<string[] | null>(null)
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState('')
 
   const load = useCallback(async () => {
-    const r = await apiFetch(`/api/studio/clients/${id}`, { cache: 'no-store' })
-    if (r.status === 404) { setMissing(true); return }
-    if (r.ok) setDetail(await r.json())
+    try {
+      const r = await apiFetch(`/api/studio/clients/${id}`, { cache: 'no-store' })
+      if (r.status === 404) { setMissing(true); return }
+      if (!r.ok) throw new Error(String(r.status))
+      setDetail(await r.json()); setFailed(false)
+    } catch { setFailed(true) }
   }, [id])
   useEffect(() => { void load(); void reloadOverview() }, [load, reloadOverview])
 
@@ -50,6 +54,7 @@ export default function StudioClient({ id }: { id: string }) {
   }, [mine])
 
   if (missing) return <div className="p-8 text-sm text-muted-foreground">{t('notFound')} <Link href="/admin/clients" className="text-primary underline">{t('title')}</Link></div>
+  if (failed && !detail) return <div className="p-8 text-sm">{t('loadFailed')} <Button size="sm" variant="outline" className="ml-2" onClick={() => void load()}>{ts('retry')}</Button></div>
   if (!detail) return <div className="flex flex-1 items-center justify-center p-10 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
 
   const active = mine.filter((p) => !p.archived)

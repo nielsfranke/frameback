@@ -58,9 +58,15 @@ export default function StudioClients() {
     if (!plan) return
     setBusy(true)
     try {
-      const r = await apiPost<{ linked: number; clientsCreated: number; skipped: number }>('/api/studio/clients/backfill', { projectIds: plan.items.map((i) => i.projectId) })
+      // exactly what the preview showed, in chunks the server accepts
+      const items = plan.items.map(({ projectId, companyName, clientId, clientName }) => ({ projectId, companyName, clientId, clientName }))
+      let linked = 0, created = 0, skipped = 0
+      for (let i = 0; i < items.length; i += 500) {
+        const r = await apiPost<{ linked: number; clientsCreated: number; skipped: number }>('/api/studio/clients/backfill', { items: items.slice(i, i + 500) })
+        linked += r.linked; created += r.clientsCreated; skipped += r.skipped
+      }
       setPlan(null)
-      toast(t('backfillDone', { linked: r.linked, created: r.clientsCreated }))
+      toast(skipped ? t('backfillDoneSkipped', { linked, created, skipped }) : t('backfillDone', { linked, created }))
       await load(); void reloadOverview()
     } catch { toast(ts('actionFailed')) } finally { setBusy(false) }
   }

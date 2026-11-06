@@ -6,7 +6,6 @@ import { useTranslations } from 'next-intl'
 
 const SUPPORTED_LANGUAGES = [
   { code: 'en' },
-  { code: 'nl' },
   { code: 'de' },
 ] as const
 

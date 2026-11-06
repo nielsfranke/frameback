@@ -1,10 +1,10 @@
 import { prisma } from '@/lib/db'
 
-export const SUPPORTED_LOCALES = ['en', 'nl', 'de'] as const
+// Frameback: English and German only (Dutch removed; a stored 'nl' falls back to 'en')
+export const SUPPORTED_LOCALES = ['en', 'de'] as const
 
 export const LOCALE_NAMES: Record<string, string> = {
   en: 'English',
-  nl: 'Nederlands',
   de: 'Deutsch',
 }
 
@@ -18,7 +18,8 @@ export async function getConfiguredLocale(): Promise<string> {
       where: { id: 'default' },
       select: { language: true },
     })
-    return settings?.language || 'en'
+    const lang = settings?.language
+    return lang && (SUPPORTED_LOCALES as readonly string[]).includes(lang) ? lang : 'en'
   } catch {
     return 'en'
   }
@@ -29,6 +30,7 @@ export async function getConfiguredLocale(): Promise<string> {
  * Returns the full messages object for the given locale.
  */
 export async function loadLocaleMessages(locale: string): Promise<Record<string, any>> {
+  if (!(SUPPORTED_LOCALES as readonly string[]).includes(locale)) locale = 'en'
   try {
     return (await import(`../locales/${locale}.json`)).default
   } catch {

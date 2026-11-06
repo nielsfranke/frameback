@@ -25,7 +25,7 @@ async function main() {
     for (const a of plan.ambiguous) console.log(`  ${a.companyName}: ${a.candidates.join(' | ')}`)
   }
   if (dry) { console.log('Dry run – nothing changed.'); return }
-  const r = await applyClientBackfill(plan.items.map((i) => i.projectId))
+  const r = await applyClientBackfill(plan.items)
   console.log(`Done: ${r.linked} linked, ${r.clientsCreated} clients created, ${r.skipped} skipped (changed meanwhile).`)
   if (logFile) { writeFileSync(logFile, JSON.stringify(r, null, 2)); console.log(`Log: ${logFile}`) }
 }

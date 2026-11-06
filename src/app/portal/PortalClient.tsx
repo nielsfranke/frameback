@@ -113,8 +113,8 @@ export default function PortalClient() {
         )}
       </div>
 
-      <div className="min-h-dvh flex flex-col items-center justify-center p-4 gap-6">
-        <BrandLogo height={56} className="mx-auto" />
+      <div className={view === 'dashboard' ? 'min-h-dvh flex flex-col items-center gap-8 px-4 pb-16 pt-20' : 'min-h-dvh flex flex-col items-center justify-center p-4 gap-6'}>
+        <BrandLogo height={view === 'dashboard' ? 40 : 56} className="mx-auto" />
 
         {expiredNotice && view === 'login' && (
           <div className="w-full max-w-md rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">

@@ -2402,6 +2402,15 @@
   },
 
   "portal": {
+    "dashboardHint": "Alle Projekte, zu denen du eingeladen bist. Was auf dich wartet, steht oben.",
+    "waitingForYou": "Wartet auf dich",
+    "otherProjects": "Weitere Projekte",
+    "pleaseReview": "{n, plural, one {Bitte prüfen} other {# Videos bitte prüfen}}",
+    "inProgress": "In Arbeit",
+    "approvedOf": "{done}/{total} freigegeben",
+    "updated": "aktualisiert {when}",
+    "review": "Prüfen",
+    "open": "Öffnen",
     "title": "Bei Ihren Projekten anmelden",
     "subtitle": "Geben Sie die E-Mail-Adresse ein, mit der ein Projekt geteilt wurde. Wir senden Ihnen einen einmaligen Anmeldelink.",
     "emailLabel": "E-Mail-Adresse",
@@ -2611,6 +2620,7 @@
     "guestNotice": "Das ist ein Link nur zum Ansehen. Kommentare und Freigaben sind hier nicht möglich."
   },
   "studio": {
+    "folderMoveFailed": "Projekt angelegt, aber nicht in den Ordner verschoben. Das geht in der Übersicht über „Verschieben nach …“.",
     "undo": "Rückgängig",
     "undone": "Rückgängig gemacht",
     "undoPartial": "{n} zurückverschoben, {skipped} bleiben, wo du sie inzwischen hingelegt hast",
@@ -2854,6 +2864,7 @@
     "folder": "Ordner",
     "folderSuggested": "Vorgeschlagen, weil der Kunde „{client}“ diesen Ordner hat.",
     "clients": {
+      "backfillDoneSkipped": "{linked} Projekte verknüpft, {created} neue Kunden, {skipped} übersprungen (inzwischen geändert)",
       "loadFailed": "Kunden konnten nicht geladen werden.",
       "title": "Kunden",
       "subtitle": "Automatisch aus deinen Projekten erstellt. Kontakte stammen aus den Empfängern der Projekte.",

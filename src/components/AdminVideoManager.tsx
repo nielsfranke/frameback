@@ -71,6 +71,9 @@ export default function AdminVideoManager({
   const [savingGroupName, setSavingGroupName] = useState<string | null>(null)
   const [deletingGroup, setDeletingGroup] = useState<string | null>(null)
   const [reordering, setReordering] = useState(false)
+  // Positions saved in this session; applied immediately so the next click never
+  // works on the order from before the refresh
+  const [savedPositions, setSavedPositions] = useState<Record<string, number>>({})
   const [preview, setPreview] = useState<{ name: string; label: string; token: string } | null>(null)
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({})
   const [sessionId] = useState<string>(() => `admin:${Date.now()}`)
@@ -256,7 +259,8 @@ export default function AdminVideoManager({
 
   // Studio-defined position (0 = not positioned yet, goes last), then natural name order.
   // Same rule as the client share view, so the studio sees what the client sees.
-  const positionOf = (name: string) => videoGroups[name]?.[0]?.group?.sortOrder || Number.MAX_SAFE_INTEGER
+  const positionOf = (name: string) =>
+    savedPositions[name] || videoGroups[name]?.[0]?.group?.sortOrder || Number.MAX_SAFE_INTEGER
   const sortedGroupNames = Object.keys(videoGroups).sort((nameA, nameB) => {
     if (sortMode === 'alphabetical') {
       return positionOf(nameA) - positionOf(nameB) || naturalCompare.compare(nameA, nameB)
@@ -292,6 +296,7 @@ export default function AdminVideoManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groupIds }),
       }).then((r) => { if (!r.ok) throw new Error(String(r.status)) })
+      setSavedPositions(Object.fromEntries(order.map((n, i) => [n, i + 1])))
       onRefresh?.()
       router.refresh()
     } catch {

@@ -96,7 +96,7 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
         className={`relative flex items-center justify-center overflow-hidden rounded-xl bg-black [:fullscreen_&]:max-h-none [:fullscreen_&]:flex-1 ${
           vertical
             // Portrait: real 9:16 frame, as large as the viewport allows, centered
-            ? 'mx-auto aspect-[9/16] h-[min(70vh,calc((100vw-2rem)*16/9))] max-w-full md:h-[min(70vh,62rem)]'
+            ? 'mx-auto aspect-[9/16] h-[min(52vh,calc((100vw-2rem)*16/9))] max-w-full md:h-[min(56vh,62rem)]'
             : 'aspect-video max-h-[62vh] w-full'
         }`}
       >

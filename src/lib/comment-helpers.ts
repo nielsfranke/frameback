@@ -10,6 +10,7 @@ import { getAppDomain } from '@/lib/url'
 import { formatTimecodeDisplay, timecodeToSeekSeconds } from '@/lib/timecode'
 import { htmlToText } from 'html-to-text'
 import { logError, logMessage } from '@/lib/logging'
+import { notifyReplyAuthor } from '@/lib/reply-notifications'
 
 /**
  * Validate comment permissions
@@ -194,6 +195,16 @@ export async function handleCommentNotifications(params: {
       : null
 
     logMessage('[COMMENT-NOTIFICATION] Video:', video?.name || 'None')
+
+    // Frameback: studio replied to a client comment whose author asked to be notified
+    // (opt-in, throttled to one mail per window, see reply-notifications.ts)
+    if (isAdminComment && parentId) {
+      try {
+        await notifyReplyAuthor({ parentId, reply: comment, project, video })
+      } catch (error) {
+        logError('[COMMENT-NOTIFICATION] reply notification failed:', error)
+      }
+    }
 
     // External notifications (Apprise) - client comments only
     if (!isAdminComment) {

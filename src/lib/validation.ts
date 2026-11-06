@@ -390,6 +390,8 @@ export const createCommentSchema = z.object({
   recipientId: cuidSchema.optional().nullable(),
   parentId: cuidSchema.optional(),
   isInternal: z.boolean().optional(),
+  // Frameback: client wants an email when the studio replies (requires authorEmail)
+  notifyReplies: z.boolean().optional(),
   assetIds: z.array(z.string()).max(50).optional(),
   annotations: annotationDataSchema.optional().nullable(),
 })

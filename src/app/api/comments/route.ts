@@ -196,6 +196,7 @@ export async function POST(request: NextRequest) {
       isInternal,
       assetIds,
       annotations,
+      notifyReplies,
     } = validation.data
 
     // Enforce configurable max comment attachments
@@ -325,12 +326,13 @@ export async function POST(request: NextRequest) {
             timecodeEnd: timecodeEnd || null,
             content: contentValidation.sanitizedContent!,
             authorName: contentValidation.sanitizedAuthorName,
-            authorEmail: finalAuthorEmail,
+            authorEmail: finalAuthorEmail ? finalAuthorEmail.trim().toLowerCase() : null,
             isInternal: isInternal || false,
             parentId: parentId || null,
             userId: authContext.user?.id || null,
             annotations: annotations || undefined,
             authorKeyHash: viewer ? hashViewerKey(viewer.key) : null,
+            notifyReplies: !isInternal && !!finalAuthorEmail && notifyReplies === true,
           },
           include: commentInclude,
         })

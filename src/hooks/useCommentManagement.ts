@@ -388,7 +388,7 @@ export function useCommentManagement({
       // Frameback fields: unknown until the server answers
       editedAt: null, deletedAt: null, deletedBy: null, authorKeyHash: null, verifiedEmail: null,
       resolvedAt: null, resolvedById: null, resolvedVia: null,
-      frame: null, frameEnd: null, fpsNum: null, fpsDen: null,
+      frame: null, frameEnd: null, fpsNum: null, fpsDen: null, notifyReplies: false,
       id: `temp-${Date.now()}`,
       projectId,
       videoId: validatedVideoId,

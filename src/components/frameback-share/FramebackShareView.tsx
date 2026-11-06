@@ -232,6 +232,16 @@ export default function FramebackShareView({
     return [...set].sort((a, b) => a.localeCompare(b))
   }, [project.recipients, comments])
   const [editingName, setEditingName] = useState(false)
+  // Optional email: only used to tell this person when the studio replies (throttled, unsubscribable)
+  const emailKey = `fb:email:${slug}`
+  const [email, setEmail] = useState('')
+  useEffect(() => { try { setEmail(localStorage.getItem(emailKey) || '') } catch { /* ignore */ } }, [emailKey])
+  const emailValid = !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const saveEmail = (v: string) => {
+    const e = v.trim()
+    setEmail(e)
+    try { if (e) localStorage.setItem(emailKey, e); else localStorage.removeItem(emailKey) } catch { /* ignore */ }
+  }
 
   const [tab, setTab] = useState<'comments' | 'files'>('comments')
   const [draft, setDraft] = useState<Record<string, string>>({})
@@ -249,7 +259,10 @@ export default function FramebackShareView({
     const content = raw.trim()
     if (!content || !selected || sendingRef.current) return
     if (!name.trim()) { setEditingName(true); setTimeout(() => document.getElementById('fb-composer-name')?.focus(), 0); return }
+    if (!emailValid) { setEditingName(true); setTimeout(() => document.getElementById('fb-composer-email')?.focus(), 0); return }
     saveName(name)
+    saveEmail(email)
+    setEditingName(false)
     sendingRef.current = true
     setPosting(true)
     try {
@@ -264,6 +277,7 @@ export default function FramebackShareView({
           content,
           isInternal: false,
           authorName: name || undefined,
+          ...(email.trim() && emailValid ? { authorEmail: email.trim(), notifyReplies: true } : {}),
         }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('failed'))
@@ -648,13 +662,30 @@ export default function FramebackShareView({
                         className="mt-1 h-9"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        onBlur={() => { if (name.trim()) { saveName(name); setEditingName(false) } }}
+                        onBlur={(e) => { if (name.trim() && e.relatedTarget?.id !== 'fb-composer-email') { saveName(name); setEditingName(false) } }}
                         onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { e.preventDefault(); saveName(name); setEditingName(false); document.getElementById('fb-composer')?.focus() } }}
                         list="fb-known-names"
                         autoComplete="name"
                         placeholder={t('namePlaceholder')}
                         required
                       />
+                      <label htmlFor="fb-composer-email" className="mt-2 block text-xs font-semibold">{t('emailForReplies')}</label>
+                      <Input
+                        id="fb-composer-email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        className="mt-1 h-9"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        onBlur={() => { if (emailValid) saveEmail(email) }}
+                        aria-invalid={!emailValid}
+                        aria-describedby="fb-composer-email-hint"
+                        placeholder={t('emailPlaceholder')}
+                      />
+                      <p id="fb-composer-email-hint" className={`mt-1 text-[11px] ${emailValid ? 'text-muted-foreground' : 'text-destructive'}`}>
+                        {emailValid ? t('emailForRepliesHint') : t('emailInvalid')}
+                      </p>
                       {knownNames.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1.5" aria-label={t('knownNames')}>
                           {knownNames.slice(0, 6).map((n) => (
@@ -666,7 +697,7 @@ export default function FramebackShareView({
                     </div>
                   ) : (
                     <p className="mb-1.5 text-xs text-muted-foreground">
-                      {t('commentingAs')} <b className="text-foreground">{name}</b>{' '}
+                      {t('commentingAs')} <b className="text-foreground">{name}</b>{email ? <span> · {t('repliesTo', { email })}</span> : null}{' '}
                       <button type="button" className="underline hover:text-foreground" onClick={() => setEditingName(true)}>{t('change')}</button>
                     </p>
                   )}

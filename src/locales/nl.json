@@ -2519,6 +2519,11 @@
     "namePlaceholder": "e.g. Anna Keller",
     "knownNames": "Names already used",
     "commentingAs": "Commenting as",
-    "change": "change"
+    "change": "change",
+    "emailForReplies": "Email for replies (optional)",
+    "emailPlaceholder": "name@company.com",
+    "emailForRepliesHint": "At most a short email when the studio replies to your comments. Unsubscribe any time via the link.",
+    "emailInvalid": "Please enter a valid email address.",
+    "repliesTo": "replies to {email}"
   }
 }

@@ -2593,6 +2593,11 @@
     "namePlaceholder": "z. B. Anna Keller",
     "knownNames": "Schon verwendete Namen",
     "commentingAs": "Kommentieren als",
-    "change": "ändern"
+    "change": "ändern",
+    "emailForReplies": "E-Mail für Antworten (optional)",
+    "emailPlaceholder": "name@firma.ch",
+    "emailForRepliesHint": "Du bekommst höchstens eine kurze Mail, wenn das Studio auf deine Kommentare antwortet. Abmelden jederzeit per Link.",
+    "emailInvalid": "Bitte eine gültige E-Mail-Adresse eingeben.",
+    "repliesTo": "Antworten an {email}"
   }
 }

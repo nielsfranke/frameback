@@ -475,6 +475,7 @@ model Comment {
   frameEnd      Int?
   fpsNum        Int? // rational frame rate, e.g. 30000/1001
   fpsDen        Int?
+  notifyReplies Boolean   @default(false) // client gave an email: mail them when the studio replies
 
   // Admin user tracking (for internal comments)
   userId String? // Admin user who created this comment

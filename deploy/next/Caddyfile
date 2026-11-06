@@ -1,0 +1,23 @@
+# Staging reverse proxy (LAN / WireGuard only).
+#  :4325  plain HTTP for quick browser tests
+#  :4326  HTTPS with Caddy's internal CA – for the Resolve MCP, which refuses http.
+#         Trust the root once on the client:  SSL_CERT_FILE=<exported root.crt>
+#         (scripts/staging/export-ca.sh exports it).
+# Production runs behind https://review.example.com with a regular certificate.
+{
+	admin off
+	auto_https disable_redirects
+	skip_install_trust
+	default_sni staging-host
+}
+
+http://:4325 {
+	encode zstd gzip
+	reverse_proxy app:4321
+}
+
+https://staging-host:4326 {
+	tls internal
+	encode zstd gzip
+	reverse_proxy app:4321
+}

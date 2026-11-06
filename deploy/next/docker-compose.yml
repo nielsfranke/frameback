@@ -1,0 +1,130 @@
+# ViTransfer "next" – staging stack, runs next to the live instance.
+#
+#   docker compose -p vitransfer-next --env-file ~/vitransfer-next/.env \
+#     -f deploy/next/docker-compose.yml up -d
+#
+# Isolation from live:
+#  - no container_name (avoids clashes with the live vitransfer-* containers)
+#  - own volumes and networks (compose project "vitransfer-next")
+#  - app/worker/postgres/redis sit on an internal network WITHOUT internet access,
+#    so staging can never send email, web push or webhooks to real customers.
+#    Only caddy joins the "edge" network and publishes the port.
+# Same major versions as live (Postgres 16, Redis 7); upgrades happen separately.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vitransfer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-vitransfer}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vitransfer}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt: [no-new-privileges:true]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - redis-data:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt: [no-new-privileges:true]
+
+  app:
+    image: ${VITRANSFER_IMAGE:-vitransfer-next:s0}
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    environment: &appenv
+      NODE_ENV: production
+      TZ: ${TZ:-UTC}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vitransfer}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vitransfer}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      STORAGE_ROOT: /app/uploads
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      # ENCRYPTION_KEY must be identical to live (stored share passwords, SMTP etc. are
+      # encrypted with it). The JWT/share secrets only sign short-lived tokens and are
+      # deliberately DIFFERENT from live: a token issued by live never works here, and
+      # tokens revoked on live (Redis blacklist) cannot come back to life.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      SHARE_TOKEN_SECRET: ${SHARE_TOKEN_SECRET:?SHARE_TOKEN_SECRET is required}
+      HTTPS_ENABLED: ${HTTPS_ENABLED:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+    volumes:
+      - uploads:/app/uploads
+    networks: [internal]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4321/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+
+  worker:
+    image: ${VITRANSFER_IMAGE:-vitransfer-next:s0}
+    restart: unless-stopped
+    command: npm run worker
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      app: {condition: service_healthy}
+    environment: *appenv
+    volumes:
+      - uploads:/app/uploads
+    networks: [internal]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep -q 'npm run worker' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 6m
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "${STAGING_PORT:-4325}:4325"
+      - "${STAGING_TLS_PORT:-4326}:4326"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks: [internal, edge]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  postgres-data:
+  redis-data:
+  uploads:
+  caddy-data:
+
+networks:
+  internal:
+    internal: true   # no route to the internet
+  edge: {}

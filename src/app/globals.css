@@ -323,3 +323,8 @@
     }
   }
 }
+
+/* Frameback share view: hide the fixed mobile decision bar while the keyboard is open */
+@media (max-width: 767px) {
+  .fb-typing .fb-decision { display: none; }
+}

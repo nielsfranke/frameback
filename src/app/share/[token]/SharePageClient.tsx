@@ -23,13 +23,18 @@ import PrivacyBanner, { PRIVACY_STORAGE_KEY } from '@/components/PrivacyBanner'
 import ReverseShareUploadPanel from '@/components/ReverseShareUploadPanel'
 import SharePhotoSection from '@/components/SharePhotoSection'
 import PhotoDeliveryGallery from '@/components/PhotoDeliveryGallery'
+import FramebackShareView from '@/components/frameback-share/FramebackShareView'
 import ShareViewToggle, { loadShareViewMode, type ShareViewMode } from '@/components/ShareViewToggle'
 
 interface SharePageClientProps {
   token: string
+  /** Frameback: render the new client view after authentication (FEATURE_NEW_SHARE) */
+  newShare?: boolean
+  /** Frameback: clients may only approve versions sent for approval (FEATURE_REVIEW_FLOW) */
+  reviewFlow?: boolean
 }
 
-export default function SharePageClient({ token }: SharePageClientProps) {
+export default function SharePageClient({ token, newShare = false, reviewFlow = false }: SharePageClientProps) {
   const t = useTranslations('share')
   const tc = useTranslations('common')
   const searchParams = useSearchParams()
@@ -989,6 +994,28 @@ export default function SharePageClient({ token }: SharePageClientProps) {
           ) : undefined}
         />
 
+        {project.settings?.privacyDisclosureEnabled && (
+          <PrivacyBanner customText={project.settings.privacyDisclosureText} slug={token} shareToken={shareToken} />
+        )}
+      </>
+    )
+  }
+
+  // Frameback: new client view (non-guests with videos). Photos keep using the gallery
+  // above, whose "back" returns here. Guests keep the legacy view for now.
+  if (newShare && !isGuest && project.hasVideos && shareToken) {
+    return (
+      <>
+        <FramebackShareView
+          slug={token}
+          project={project}
+          shareToken={shareToken}
+          authenticatedName={authenticatedName}
+          reviewFlow={reviewFlow}
+          defaultQuality={defaultQuality}
+          onRefresh={() => fetchProjectData()}
+          onOpenPhotos={project.hasPhotos ? () => setViewState('gallery') : undefined}
+        />
         {project.settings?.privacyDisclosureEnabled && (
           <PrivacyBanner customText={project.settings.privacyDisclosureText} slug={token} shareToken={shareToken} />
         )}

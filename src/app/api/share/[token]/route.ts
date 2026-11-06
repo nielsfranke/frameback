@@ -164,6 +164,10 @@ export async function GET(
       thumbnailPath: video.thumbnailPath,
       createdAt: video.createdAt,
       hasAssets: (video._count?.assets ?? 0) > 0,
+      // Frameback review flow (guests get a reduced set below without these)
+      groupId: video.groupId,
+      reviewState: video.reviewState,
+      versionNote: video.versionNote,
       // Explicitly omit: projectId, originalStoragePath, preview720Path, preview1080Path,
       // cleanPreview720Path, cleanPreview1080Path, processingError, processingProgress,
       // uploadProgress

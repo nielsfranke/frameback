@@ -9,6 +9,7 @@ import { ReprocessModal } from './ReprocessModal'
 import { InlineEdit } from './InlineEdit'
 import { Trash2, CheckCircle2, XCircle, Pencil, Upload, Download, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react'
 import { apiPost, apiPatch, apiDelete, apiFetch } from '@/lib/api-client'
+import ReviewRequestControl from '@/components/ReviewRequestControl'
 import { VideoAssetUploadQueue } from './VideoAssetUploadQueue'
 import { VideoAssetList } from './VideoAssetList'
 import { logError } from '@/lib/logging'
@@ -368,6 +369,15 @@ export default function VideoList({ videos: initialVideos, isAdmin = true, onRef
                 )}
               </div>
               <p className="text-xs text-muted-foreground truncate">{video.originalFileName}</p>
+              {isAdmin && isLatest && video.status === 'READY' && (video as any).reviewState && (
+                <ReviewRequestControl
+                  videoId={video.id}
+                  versionLabel={video.versionLabel}
+                  reviewState={(video as any).reviewState}
+                  versionNote={(video as any).versionNote}
+                  onChanged={onRefresh}
+                />
+              )}
             </>
           )}
         </div>

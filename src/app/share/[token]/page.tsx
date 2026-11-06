@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import SharePageClient from './SharePageClient'
+import { features } from '@/lib/features'
 
 interface SharePageProps {
   params: Promise<{ token: string }>
@@ -21,5 +22,6 @@ export default async function SharePage({ params }: SharePageProps) {
     notFound()
   }
 
-  return <SharePageClient token={token} />
+  // Frameback: feature flags are read server-side and handed to the client view
+  return <SharePageClient token={token} newShare={features.newShare} reviewFlow={features.reviewFlow} />
 }

@@ -32,9 +32,13 @@ export default function NewProjectPage() {
   const clientTouched = useRef(false)
   // approval flow: preset from the studio default, changeable per project
   const tr = useTranslations('review')
-  const [reviewFlow, setReviewFlow] = useState(false)
+  // null = not known yet: the form then sends nothing and the server applies the default
+  const [reviewFlow, setReviewFlow] = useState<boolean | null>(null)
+  const reviewFlowTouched = useRef(false)
   useEffect(() => {
-    apiFetch('/api/settings').then((r) => (r.ok ? r.json() : null)).then((s) => { if (s) setReviewFlow(!!s.defaultReviewFlow) }).catch(() => {})
+    apiFetch('/api/settings').then((r) => (r.ok ? r.json() : null)).then((s) => {
+      if (s && !reviewFlowTouched.current) setReviewFlow(!!s.defaultReviewFlow)
+    }).catch(() => {})
   }, [])
   const tc = useTranslations('common')
   const [loading, setLoading] = useState(false)
@@ -140,7 +144,7 @@ export default function NewProjectPage() {
       isShareOnly: isShareOnlyValue,
       dueDate: dueDate ? `${dueDate}T12:00:00.000Z` : null,
       dueReminder: dueDate ? dueReminder : null,
-      reviewFlow,
+      ...(reviewFlow === null ? {} : { reviewFlow }),
     }
 
     try {
@@ -230,7 +234,7 @@ export default function NewProjectPage() {
                   <span className="block text-sm font-medium">{tr('projectSettingLabel')}</span>
                   <span className="block text-xs text-muted-foreground">{reviewFlow ? tr('projectSettingOn') : tr('projectSettingOff')}</span>
                 </span>
-                <input type="checkbox" className="mt-1 h-4 w-4 accent-primary" checked={reviewFlow} onChange={(e) => setReviewFlow(e.target.checked)} />
+                <input type="checkbox" className="mt-1 h-4 w-4 accent-primary" checked={!!reviewFlow} onChange={(e) => { reviewFlowTouched.current = true; setReviewFlow(e.target.checked) }} />
               </label>
 
               {/* Due Date */}

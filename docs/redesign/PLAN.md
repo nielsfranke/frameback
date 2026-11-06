@@ -67,32 +67,60 @@ Stand: 06.11.2026 · v3 mit Entscheidungen des Betreibers
 
 ## 3. Datenmodell (Schema nur ergänzend, Enums statt freier Strings)
 
-### 3.1 Ordner
+### 3.1 Ordner und Kunden (Stand 06.11., nach Studio-Prototyp und Codex)
+
+**Kunde und Ordner sind getrennt.** Ein Kunde ist eine Beziehung mit Kontakten (`ClientCompany`, gibt es schon; `Project.clientCompanyId` gibt es schon). Ein Ordner ist freie Organisation nur für das Studio. Ein Ordner wie „Messen 2026“ kann Projekte mehrerer Kunden enthalten; ein Kunde braucht keinen Ordner.
+
 ```prisma
 model Folder {
-  id              String   @id @default(cuid())
-  name            String
-  parentId        String?
-  parent          Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children        Folder[] @relation("FolderTree")
-  clientCompanyId String?                                   // Kunden-Ordner = gesetzt (kein separates isClient)
-  clientCompany   ClientCompany? @relation(fields: [clientCompanyId], references: [id], onDelete: SetNull)
-  sortOrder       Int      @default(0)
-  projects        Project[]
-  shareLinks      ShareLink[]
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?                      // vorerst per CHECK immer NULL (eine Ebene); Verschachtelung später mit Zyklus-/Tiefenprüfung unter Sperre
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Folder[] @relation("FolderTree")
+  sortOrder Int      @default(0)
+  projects  Project[]
+  createdAt DateTime @default(now())
   @@index([parentId])
 }
-// Project: + folderId String? @relation(onDelete: SetNull)
-```
-- Beim Verschieben wird die Zeile des Ordners gesperrt (`SELECT … FOR UPDATE`), der Zyklus geprüft und die **Tiefe des ganzen Unterbaums** (maximal 8). Das alles läuft in einer Transaktion.
-- Ordner haben **keine Auswirkung auf Rechte**. Verschieben ändert nie, wer was sieht.
-- **Vorschlag beim ersten Aufruf** (Dialog „Struktur übernehmen“, nichts passiert automatisch):
-  - je `ClientCompany` ein Kunden-Ordner
-  - darin Jahres-Unterordner nach dem Erstellungsjahr der Projekte (nur Jahre, die es gibt)
-  - Projekte ohne Kunde kommen nach „Ohne Kunde / <Jahr>“
+// Project: + folderId String? (onDelete: SetNull), + folderChangedAt DateTime?
+// Archiv: einzige Quelle bleibt Project.status = ARCHIVED (kein archivedAt)
 
-  Vorschau als Baum mit Anzahl. Einzelne Zweige lassen sich abwählen, und der Vorschlag kann rückgängig gemacht werden (Ordner wieder entfernen, `folderId` auf null).
-- Neue Projekte: Wird bei einem Projekt ein Kunde gewählt, schlägt der Dialog den Ordner „<Kunde> / <aktuelles Jahr>“ vor und legt ihn bei Bedarf an.
+model FolderMoveBatch {                   // für „Nach Kunde ordnen“ und Mehrfach-Verschieben mit Undo
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  undoneAt  DateTime?
+  createdFolderIds String[]               // nur diese, und nur wenn leer, löscht Undo
+  items     FolderMoveItem[]
+}
+model FolderMoveItem {
+  batchId      String
+  projectId    String
+  prevFolderId String?
+  newFolderId  String?
+  @@id([batchId, projectId])
+}
+model ClientMergeDecision {               // „Zusammenführen“ / „Getrennt lassen“ dauerhaft merken
+  aId String; bId String; decision String // MERGED | KEEP_SEPARATE
+  decidedAt DateTime @default(now())
+  @@id([aId, bId])
+}
+model StudioCommentSeen {
+  userId String; commentId String; seenAt DateTime @default(now())
+  @@id([userId, commentId])
+}
+// User: + feedbackSeenBaseline DateTime?  (Kommentare davor gelten als gelesen)
+```
+- **Undo eines Batches** setzt ein Projekt nur zurück, wenn `folderId = newFolderId` **und** `folderChangedAt` nicht nach dem Batch liegt (also seitdem nicht manuell bewegt). Gleichnamige Ordner werden nur wiederverwendet, wenn es genau einen gibt und die Vorschau ihn zeigt.
+- Ordner haben **keine Auswirkung auf Rechte**. Kunden sehen Ordner nie.
+- **Vorschlag „Nach Kunde ordnen“** (nichts passiert automatisch): nur Projekte **ohne Ordner** mit eindeutigem Kunden, je Kunde ein Ordner (vorhandenen gleichnamigen wiederverwenden). Vorschau mit Zuordnung, Projekte ohne/unklaren Kunden bleiben draußen. Rückgängig über eine Batch-ID; Undo setzt nur Projekte zurück, die seitdem nicht manuell verschoben wurden, und löscht nur dabei angelegte, leere Ordner. Jahres-Unterordner nur auf Wunsch, nicht als Standard.
+- **Kundenverzeichnis füllt sich selbst** – als eigener Datenschritt, getrennt von der Schema-Migration:
+  - `scripts/backfill-clients.ts --dry-run` zeigt Fallzahlen und jede geplante Zuordnung; ohne `--dry-run` schreibt es dieselben Zuordnungen und ein JSON-Protokoll (Projekt → Kunde, neu/vorhanden).
+  - Nur Projekte mit `clientCompanyId IS NULL` und nicht leerem `companyName`. Treffer auf vorhandene `ClientCompany` per Trim + Groß/Klein; mehrdeutige Treffer werden **nicht** zugeordnet. Bestehende Zuordnungen werden nie überschrieben; ein zweiter Lauf ändert nichts (idempotent).
+  - Vorher auf einer Kopie der Produktion (Staging) laufen lassen und das Protokoll prüfen.
+  - Ähnliche Namen (normalisiert: Rechtsform, Satzzeichen) werden nur **vorgeschlagen**; die Entscheidung landet in `ClientMergeDecision`. **Zusammenführen** verschiebt Projekte und `ClientContact` (Dubletten per E-Mail zusammengelegt) zum Ziel und entfernt den Quell-Kunden in einer Transaktion. „Sync Existing“ entfällt.
+- **Kontakte:** `ClientContact` bleibt die Quelle. Projekt-Empfänger werden **nur angezeigt** (mit Herkunft „Empfänger in …“) und lassen sich per Klick als Kontakt übernehmen; Empfänger selbst werden nie verändert. Kommentierende werden nicht automatisch Kontakte.
+- **Neues Projekt:** Kunde optional per Autocomplete („Neuen Kunden anlegen“, „Ohne Kunde“), Ordner wird vorgeschlagen und bleibt änderbar; Zugriff und Empfänger sind vor dem Anlegen sichtbar. Keine still übernommenen Vorgaben.
 
 ### 3.2 Video-Gruppen
 ```prisma
@@ -286,9 +314,25 @@ Neu:
 - Die Zeitstelle eines Kommentars wird als **Frame** erfasst (`requestVideoFrameCallback`, falls verfügbar, sonst `currentTime × fps`, gerundet) und mit rationaler fps gespeichert. Die Toleranz ±1 Frame wird dokumentiert.
 - Ohne Feature-Flag läuft weiterhin die alte Share-Seite.
 
-## 5. Studio-Ansicht (nach Prototyp)
+## 5. Studio-Ansicht (Prototyp `studio/`, von Niels am 06.11. abgenommen)
 
-Wie in v1. Drag & Drop und die Entscheidungsregel `ALL` kommen erst in einem späteren Schritt.
+**Navigation:** eine Seitenleiste. „Projekte“ (alle aktiven) mit den Ansichten „Neues Feedback“ und „Zur Freigabe gesendet“, darunter „Ordner“ (+, Ordner, „Ohne Ordner“), dann Archiv, Kunden, Kalender, Einstellungen. Auf Projekt- und Review-Seiten bleibt die Herkunft (Ordner/Ansicht) markiert. Mobil: dieselbe Navigation als Sheet.
+
+**Projektübersicht:** dichte Liste (Raster bleibt Option): Thumbnail, Titel, Kunde, ggf. Ordner, Freigabestand („7/10 freigegeben · 2 wartet“ mit Balken aus den echten Versionszuständen), „n neu“ und letzte Aktivität. Suche über alle Projekte inklusive Archiv. Mehrfachauswahl mit „Verschieben nach …“ und „Archivieren“; Ziehen auf einen Ordner als Ergänzung.
+
+**Projektseite:** Videos zuerst, Reihenfolge per Ziehen am Griff (Zeiger, Touch nur am Griff, Tastatur: Leertaste/Pfeile/Escape, Live-Region), sofort gespeichert mit Undo. Je Video eine passende Hauptaktion („Feedback (n neu)“ / „Zur Freigabe senden“ / „Ansehen“) plus immer „Neue Version“ und „⋯“. Kopf: Zusammenfassung, „Teilen“ (Link, Zugriff, Inhalt, Als Kunde ansehen, Senden – mit Grund, wenn E-Mail fehlt), „Hochladen“, „⋯“ (Einstellungen, Statistik, Archivieren, Löschen). Rechts „Verlauf“ aus `ReviewDecision` und Uploads.
+
+**Studio-Player:** derselbe Player wie in der Kundenansicht, Kommentare an **Version** gebunden, Filter Offen/Erledigt/Alle, Antworten, „Erledigt“/„Wieder öffnen“ (`resolvedAt`), Kunde sieht „Vom Studio erledigt“. Ältere Versionen wählbar mit Hinweis. Studio-Kommentar: Zeit wird beim Losschreiben gemerkt, Video hält an. „Aktuelles Bild als Thumbnail“ (S2+).
+
+**Lesestand:** pro Studio-Nutzer und Kommentar (`StudioCommentSeen`, Schlüssel `(userId, commentId)`), gesetzt wenn der Kommentar ≥1 s sichtbar war. „n neu“ zählt nur **Kunden**-Kommentare und -Antworten (`isInternal = false`, `userId IS NULL`), nicht gelöschte, jünger als `User.feedbackSeenBaseline` (bei Einführung = Migrationszeitpunkt, damit Altfeedback nicht als neu erscheint) und ohne Seen-Eintrag. Dieselbe Regel gilt für die Zähler in Übersicht und Seitenleiste. Unabhängig von Offen/Erledigt.
+
+**Erledigt:** API, Rechte (nur Studio) und Herkunftsanzeige (`resolvedVia = STUDIO`) entstehen vollständig in S2a; S4 nutzt sie nur für Resolve/MCP.
+
+**Teilen:** Das Popover nutzt die vorhandene Inhalt-Einstellung (Videos/Fotos/beides); deren serverseitige Durchsetzung und die Autorisierungstests gehören zu S2a.
+
+**Wahrheit, die bleibt:** Eine neue READY-Version ist sofort aktuell und für den Kunden sichtbar („In Arbeit“, kommentierbar). „Zur Freigabe senden“ schaltet nur das Freigeben frei.
+
+Die Entscheidungsregel `ALL` kommt später.
 
 ## 6. API
 
@@ -385,10 +429,13 @@ Jeder Schritt ist ein deploybarer Stand hinter Feature-Flags, wird im Staging ge
 | **S0 Fundament** | Gepinntes Image, Staging inklusive Sperre und HTTPS, Probelauf-Skript, Redis-Inventur, Testgerüst (Vitest, Playwright), CI-Vertragstests, MCP gegen Staging | Prüfbericht grün, MCP-Suite grün, Testversand scheitert | 6–9 |
 | **S1 MVP für Kunden** | `VideoGroup` und „aktuell = neueste READY“, `reviewState` mit `review.ts` (nur `ANY`), Admin-Override, minimaler Dialog „Zur Freigabe senden“ (mit Versionsnotiz), neue Kundenansicht, Kommentare bearbeiten, löschen und wiederherstellen per Browser-Kennung, Soft-Delete überall | Playwright: Version finden, kommentieren, korrigieren, Änderungen anfordern, freigeben, Datei laden (Desktop und Handy); negative Autorisierungstests; MCP grün | 18–28 |
 | **S1-Umstieg** | Erster echter Umstieg nach 8.3 mit S1 | Live auf eigenem Image | 3–5 |
-| **S2 Studio-Ansicht und Portal** | Projektseite neu, Ordner (`Folder`), Ordnerbaum, Breadcrumbs, Strukturvorschlag Kunde/Jahr, Teilen-Dialog mit `shareContent`, Kundenportal im neuen Design, `nl` entfernen | Projekte in Ordnern verwaltbar, Vorschlag übernehm- und rückgängig machbar, `shareContent` serverseitig wirksam | 10–16 |
+| **S2a Projektseite und Studio-Player** (Flag `FEATURE_STUDIO_V2`) | Neue Projektseite inkl. Mobil, Drag & Drop (vorhandenes `video-order`), Teilen-Popover inkl. serverseitiger Inhalt-Einstellung, Verlauf, Studio-Player mit Antworten und Erledigt (vollständige API), versionsgebundene Ansicht, Lesestand mit Baseline, „Vom Studio erledigt“ in der Kundenansicht | Playwright Desktop + Handy: sortieren per Maus, Touch und Tastatur; Undo; 409 bei geänderter Videoliste; Feedback lesen (Zähler sinkt), antworten, erledigen/wieder öffnen, neue Version, zur Freigabe senden; Autorisierungstests Teilen-Inhalt | 9–13 |
+| **S2b-1 Übersicht und Ordner** | Eine Seitenleiste, Ansichten, dichte Liste mit Freigabestand und „n neu“, `Folder` (eine Ebene), Mehrfachauswahl, Verschieben/Archivieren mit Batch-Undo | Ordner anlegen/umbenennen/löschen, verschieben (Menü + Ziehen), Undo respektiert spätere manuelle Verschiebungen; Archiv nur über `status` | 6–9 |
+| **S2b-2 Kunden** | Backfill-Skript (Dry-Run, Protokoll, idempotent), Dublettenvorschläge mit gespeicherter Entscheidung, Zusammenführen, Kundenseite, Kontakte mit Herkunft, Neues-Projekt-Dialog, Vorschlag „Nach Kunde ordnen“ | Dry-Run auf Produktionskopie geprüft; zweiter Lauf ohne Änderung; kein stiller Merge; Merge verschiebt Projekte/Kontakte korrekt | 6–9 |
+| **S2c Portal und Aufräumen** | Kundenportal im neuen Design, `nl` entfernen | Portal-Login und Projektliste per Playwright; keine `nl`-Reste, Sprachauswahl nur de/en | 3–5 |
 | ~~S3 Ordner-Shares~~ | entfällt (Entscheidung v3) | – | – |
 | **S2+ Thumbnail aus Player-Position** (Wunsch Niels, 06.11.) | Im Studio-Player „Als Thumbnail verwenden“ an der aktuellen Stelle: `POST /api/videos/:id/thumbnail {seconds}` (Admin). Erzeugt per ffmpeg ein Bild aus dem Original an genau dieser Stelle (Worker-Job, auch für S3-Speicher), legt es als Asset (Kategorie `image`) ab und setzt es als Thumbnail. Das bestehende „Asset als Thumbnail setzen“ bleibt. | Bild entspricht dem Frame (±1 Frame), erscheint in Kundenliste und Willkommensdialog, Asset ist in „Vorschaubilder“ herunterladbar | 1–2 |
-| **S4 Resolve** | Frames und rationale fps, Kommentare mit Cursor und Tombstones, `resolved`, MCP-Werkzeuge | Rendern, Upload, Kommentar, Marker, erledigt, Status | 7–12 |
+| **S4 Resolve** | Frames und rationale fps, Kommentare mit Cursor und Tombstones, MCP-Werkzeuge (nutzen die Erledigt-API aus S2a) | Rendern, Upload, Kommentar, Marker, erledigt, Status | 7–12 |
 | **S5 Ausbau** | `ALL`-Freigeber, Drag & Drop, Asset-Zwecke, Upgrade PG 18 und Redis 8, alte Felder entfernen | je nach Umfang | 6–11 |
 
 \*PT = Personentage eines erfahrenen Entwicklers mit KI-Unterstützung (Codex-Schätzung, leicht angepasst). **Summe ≈ 50–81 PT** (ohne Ordner-Shares). Der erste Kundennutzen kommt nach S0 + S1 + Umstieg, also nach rund 27–42 PT.

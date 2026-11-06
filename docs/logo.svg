@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#0f1012"/>
+  <g transform="translate(6.4 6.4) scale(0.8)">
+    <path d="M20 8H8V20M44 8H56V20M8 44V56H20M56 44V56H44" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="square"/>
+    <path d="M23 20H41Q46 20 46 25V35Q46 40 41 40H33L23 48V40Q18 40 18 35V25Q18 20 23 20Z" fill="hsl(211 100% 50%)"/>
+  </g>
+</svg>

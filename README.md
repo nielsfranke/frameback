@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/icon.svg" alt="Frameback logo" width="96">
+  <img src="docs/logo.svg" alt="Frameback logo" width="96">
 </p>
 
 <h1 align="center">Frameback</h1>

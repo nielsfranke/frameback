@@ -1,5 +1,5 @@
 /** Video groups of a project as the studio sees them (shared by project page and player). */
-import { groupState, type GroupState } from '@/lib/studio'
+import { groupState, type GroupState } from '@/lib/studio-shared'
 
 export interface AdminVideo {
   id: string

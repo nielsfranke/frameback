@@ -122,9 +122,12 @@ export default function StudioReview({ projectId }: { projectId: string }) {
     .filter((c) => c.videoId === video?.id && !c.parentId && !c.deleted)
     .map((c) => ({ ...c, seconds: timecodeToSeconds(c.timecode, fps) }))
     .sort((a, b) => a.seconds - b.seconds), [comments, video?.id, fps])
-  const open = threads.filter((c) => !c.resolvedAt)
-  const done = threads.filter((c) => !!c.resolvedAt)
-  const effectiveFilter: Filter = filter ?? (open.length ? 'open' : 'all')
+  // open/done is about client feedback; the studio's own notes only show under "all"
+  const open = threads.filter((c) => isClient(c) && !c.resolvedAt)
+  const done = threads.filter((c) => isClient(c) && !!c.resolvedAt)
+  // default view: open feedback, unless something unread sits in a done thread (never hide new feedback)
+  const unreadInDone = done.some((c) => unread.has(c.id) || (c.replies ?? []).some((r) => unread.has(r.id)))
+  const effectiveFilter: Filter = filter ?? (open.length && !unreadInDone ? 'open' : 'all')
   const shown = effectiveFilter === 'open' ? open : effectiveFilter === 'done' ? done : threads
 
   const markers: Marker[] = useMemo(() => {
@@ -133,7 +136,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
     return [...by.values()].map((list) => ({
       id: list[0].id,
       seconds: list[0].seconds,
-      label: list.length > 1 ? String(list.length) : initials(list[0].authorName),
+      label: list.length > 1 ? String(list.length) : initials(list[0].authorName || (isClient(list[0]) ? t('client') : t('studio'))),
       count: list.length,
       studio: !isClient(list[0]),
     }))
@@ -263,7 +266,7 @@ export default function StudioReview({ projectId }: { projectId: string }) {
         )}
         <div className="ml-7 mt-1.5 flex gap-1">
           <button type="button" onClick={() => { setReplyTo(replyTo === c.id ? null : c.id); setReplyText('') }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"><CornerUpLeft className="h-3.5 w-3.5" />{t('reply')}</button>
-          {c.resolvedAt
+          {!isClient(c) ? null : c.resolvedAt
             ? <button type="button" onClick={() => resolve(c, false)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"><RotateCcw className="h-3.5 w-3.5" />{t('reopen')}</button>
             : <button type="button" onClick={() => resolve(c, true)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-success hover:bg-accent"><Check className="h-3.5 w-3.5" />{t('markDone')}</button>}
         </div>

@@ -8,7 +8,8 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from './db'
 
-export type GroupState = 'draft' | 'waiting' | 'changes' | 'approved'
+import { groupState } from './studio-shared'
+export { groupState, type GroupState } from './studio-shared'
 
 export interface ProjectSummary {
   id: string
@@ -38,14 +39,6 @@ export type LastActivity =
   | { type: 'decision'; at: string; actor: string; kind: string }
   | { type: 'upload'; at: string; video: string; version: number }
   | { type: 'created'; at: string }
-
-/** State of a video group = state of its current (highest READY) version */
-export function groupState(v: { reviewState: string | null; approved: boolean }): GroupState {
-  if (v.reviewState === 'APPROVED' || v.approved) return 'approved'
-  if (v.reviewState === 'IN_REVIEW') return 'waiting'
-  if (v.reviewState === 'CHANGES_REQUESTED') return 'changes'
-  return 'draft'
-}
 
 /** Client-authored, not deleted: the only comments that count as feedback */
 export const CLIENT_FEEDBACK_SQL = Prisma.sql`c."deletedAt" IS NULL AND c."isInternal" = false AND c."userId" IS NULL`

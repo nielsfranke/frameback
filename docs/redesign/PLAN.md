@@ -269,6 +269,12 @@ Umgesetzt in `src/lib/review.ts`, Migration `20261106120256_frameback_review_flo
 - **Neue Gruppen während „Projekt zurücknehmen“:** Sie entstehen ohne Freigabe und ohne Runde, das Zurücknehmen betrifft sie daher nicht. Eine Projekt-Sperre ist unnötig.
 - **HTTP-Vertragstests** (PATCH mit `{name, approved}`, Flag an/aus, Benachrichtigungen) folgen mit dem MCP-Livetest im Staging.
 
+**Nach S1/2 (Kommentare, Aktionen) bewusst offen** (Codex-Runden 4 und 5):
+- **Zustellung von Benachrichtigungen** (Änderungswunsch an das Studio, E-Mail-Abbruch bei Löschung): Sie läuft weiterhin „nach dem Commit, best effort“. Eine Outbox kommt in S5, zusammen mit E-Mail-Vorlagen für „Bitte prüfen“ (Kunde) und „Änderungen angefordert“ (Studio).
+- **Gleichzeitiges Bearbeiten desselben Kommentars in zwei Tabs:** Der letzte gewinnt, ein Versionsvergleich ist nicht nötig, weil es nur den eigenen Kommentar betrifft.
+- **Produktregel:** Wer Zugriff auf ein Projekt mit Kommentar- bzw. Freigaberecht hat, darf über *alle* Videos dieses Projekts entscheiden. Rechte pro Video gibt es nicht.
+- **Startprüfung:** Ist `NEXT_PUBLIC_APP_URL` `https://…`, muss `HTTPS_ENABLED=true` gesetzt sein. Diese Prüfung kommt mit dem ersten Produktions-Deployment (S1-Umstieg), zusammen mit `ALLOWED_ORIGINS`.
+
 ## 4. Kundenansicht (nach Prototyp v2)
 
 Wie in v1 beschrieben:

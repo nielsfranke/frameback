@@ -12,8 +12,14 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { NextRequest, NextResponse } from 'next/server'
 import { hashViewerKey } from './review'
 
-export const VIEWER_COOKIE = 'vt_viewer'
 const ONE_YEAR = 60 * 60 * 24 * 365
+const secureMode = () => process.env.HTTPS_ENABLED === 'true'
+/**
+ * Under HTTPS the cookie uses the __Host- prefix: the browser then enforces Secure,
+ * Path=/ and no Domain attribute, so a sibling subdomain cannot plant or overwrite it.
+ */
+export const viewerCookieName = () => (secureMode() ? '__Host-vt_viewer' : 'vt_viewer')
+export const VIEWER_COOKIE = 'vt_viewer' // plain-HTTP name (LAN staging / development)
 
 function secret() {
   const s = process.env.ENCRYPTION_KEY
@@ -25,10 +31,12 @@ const sign = (key: string) => createHmac('sha256', secret()).update(`vt_viewer:$
 
 /** Returns the verified viewer key from the request cookie, or null. */
 export function readViewerKey(request: NextRequest): string | null {
-  const raw = request.cookies.get(VIEWER_COOKIE)?.value
+  const raw = request.cookies.get(viewerCookieName())?.value
   if (!raw) return null
-  const [key, sig] = raw.split('.')
-  if (!key || !sig || !/^[0-9a-f]{64}$/.test(key) || !/^[0-9a-f]{32}$/.test(sig)) return null
+  const parts = raw.split('.')
+  if (parts.length !== 2) return null
+  const [key, sig] = parts
+  if (!/^[0-9a-f]{64}$/.test(key) || !/^[0-9a-f]{32}$/.test(sig)) return null
   const expected = Buffer.from(sign(key))
   const given = Buffer.from(sig)
   return expected.length === given.length && timingSafeEqual(expected, given) ? key : null
@@ -41,9 +49,9 @@ export function viewerKeyFor(request: NextRequest): { key: string; isNew: boolea
 }
 
 export function setViewerCookie(response: NextResponse, key: string) {
-  response.cookies.set(VIEWER_COOKIE, `${key}.${sign(key)}`, {
+  response.cookies.set(viewerCookieName(), `${key}.${sign(key)}`, {
     httpOnly: true,
-    secure: process.env.HTTPS_ENABLED === 'true',
+    secure: secureMode(),
     sameSite: 'lax',
     path: '/',
     maxAge: ONE_YEAR,
@@ -70,8 +78,13 @@ export function applySoftDelete<T>(comments: T[]): T[] {
     const replies = (c.replies ?? []).filter((r) => !r.deletedAt)
     if (c.deletedAt) {
       if (replies.length === 0) continue
+      // Explicit placeholder: only structural fields survive (no author, user, key hash, assets)
       out.push({
-        ...c, replies, content: '', authorName: null, authorEmail: null, annotations: null, assets: [], deleted: true,
+        id: c.id, projectId: c.projectId, videoId: c.videoId, videoVersion: c.videoVersion,
+        timecode: c.timecode, timecodeEnd: c.timecodeEnd, parentId: c.parentId ?? null,
+        isInternal: c.isInternal, createdAt: c.createdAt, updatedAt: c.updatedAt,
+        deletedAt: c.deletedAt, content: '', authorName: null, authorEmail: null, user: null, userId: null,
+        annotations: null, assets: [], deleted: true, replies,
       } as unknown as T)
     } else {
       out.push({ ...c, replies } as unknown as T)

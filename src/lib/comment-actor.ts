@@ -29,8 +29,14 @@ export async function resolveCommentActor(
     requiredPermission: 'comment',
     requireVideoAccess: true,
   })
+  // No share session at all: 401 so the page can ask for the password/code again.
+  // Authenticated for another share, guest, or missing permission: answer like a missing
+  // comment (404) – no probing of comment ids across shares.
   if (!access.authorized) {
-    return access.errorResponse || NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    const status = access.errorResponse?.status
+    return status === 401
+      ? access.errorResponse!
+      : NextResponse.json({ error: 'Comment not found' }, { status: 404 })
   }
   return { actor: { kind: 'client', viewerKeyHash: viewerHashFrom(request) }, projectId: project.id }
 }

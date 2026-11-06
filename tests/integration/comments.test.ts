@@ -113,3 +113,37 @@ describe('delete and restore', () => {
     expect((applySoftDelete(raw)[0] as { replies: unknown[] }).replies).toHaveLength(0)
   })
 })
+
+describe('codex review fixes (comments)', () => {
+  it('a comment removed by the studio cannot be restored by the client', async () => {
+    const { project, user, own } = await setup()
+    await softDeleteComment({ commentId: own.id, actor: { kind: 'admin', userId: user.id } })
+    await expectCode(restoreComment({ commentId: own.id, actor: { kind: 'client', viewerKeyHash: annaHash }, projectId: project.id }), 'FORBIDDEN')
+    await restoreComment({ commentId: own.id, actor: { kind: 'admin', userId: user.id } })
+  })
+
+  it('placeholders carry no author, user or key hash', async () => {
+    const { project, user, own } = await setup()
+    await prisma.comment.update({ where: { id: own.id }, data: { userId: user.id, authorName: 'Anna' } })
+    await softDeleteComment({ commentId: own.id, actor: { kind: 'client', viewerKeyHash: annaHash }, projectId: project.id })
+    const raw = await prisma.comment.findMany({ where: { projectId: project.id, parentId: null }, include: { replies: true, user: true } })
+    const p = applySoftDelete(raw)[0] as Record<string, unknown>
+    expect(p).toMatchObject({ deleted: true, content: '', authorName: null, user: null, userId: null })
+    expect(p.authorKeyHash).toBeUndefined()
+  })
+
+  it('under HTTPS the cookie is __Host- prefixed and Secure', () => {
+    const prev = process.env.HTTPS_ENABLED
+    process.env.HTTPS_ENABLED = 'true'
+    try {
+      const res = setViewerCookie(NextResponse.json({}), KEY_A)
+      const c = res.cookies.get('__Host-vt_viewer')!
+      expect(c.secure).toBe(true)
+      expect(c.path).toBe('/')
+      const r = new NextRequest('https://x/', { headers: { cookie: `__Host-vt_viewer=${c.value}` } })
+      expect(readViewerKey(r)).toBe(KEY_A)
+    } finally {
+      process.env.HTTPS_ENABLED = prev
+    }
+  })
+})

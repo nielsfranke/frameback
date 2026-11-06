@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { applySoftDelete, viewerHashFrom } from '@/lib/comment-ownership'
+import { applySoftDelete, setViewerCookie, viewerKeyFor } from '@/lib/comment-ownership'
+import { hashViewerKey } from '@/lib/review'
 import { getPrimaryRecipient } from '@/lib/recipients'
 import { rateLimit } from '@/lib/rate-limit'
 import { verifyProjectAccess } from '@/lib/project-access'
@@ -132,7 +133,10 @@ export async function GET(
     })
 
     // Sanitize comments - never expose PII to non-admins
-    const viewerHash = viewerHashFrom(request)
+    // Establish the browser key when the comments load (before the first comment is
+    // written), so two quick first comments cannot end up with different keys.
+    const viewer = viewerKeyFor(request)
+    const viewerHash = hashViewerKey(viewer.key)
     const sanitizedComments = applySoftDelete(comments as any[]).map((comment: any) => sanitizeComment(
       comment,
       isAdmin,
@@ -141,7 +145,9 @@ export async function GET(
       viewerHash,
     ))
 
-    return NextResponse.json(sanitizedComments)
+    const response = NextResponse.json(sanitizedComments)
+    if (viewer.isNew && !isGuest) setViewerCookie(response, viewer.key)
+    return response
   } catch (error) {
     logError('Error fetching comments:', error)
     const locale = await getConfiguredLocale().catch(() => 'en')

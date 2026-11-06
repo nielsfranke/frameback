@@ -28,6 +28,12 @@ interface ApprovalNotificationContext {
   isComplete?: boolean // true = all videos approved, false = partial approval
 }
 
+/** Frameback: soft-deleted comments are never announced by email. */
+async function isCommentDeleted(commentId: string): Promise<boolean> {
+  const c = await prisma.comment.findUnique({ where: { id: commentId }, select: { deletedAt: true } })
+  return !c || !!c.deletedAt
+}
+
 /**
  * Send immediate notification (when schedule is IMMEDIATE)
  * @param target - 'client' to send to clients, 'admin' to send to admins
@@ -36,7 +42,7 @@ export async function sendImmediateNotification(context: NotificationContext, ta
   const { comment, project, video, attachmentNames } = context
 
   const redis = getRedis()
-  const cancelled = await redis.get(`comment_cancelled:${comment.id}`)
+  const cancelled = await redis.get(`comment_cancelled:${comment.id}`) || await isCommentDeleted(comment.id)
 
   if (cancelled) {
     logMessage(`[IMMEDIATE] Comment ${comment.id} notification was cancelled, skipping send`)
@@ -391,7 +397,8 @@ export async function flushPendingAdminNotifications(): Promise<void> {
     for (const notification of pendingNotifications) {
       const commentId = (notification.data as any).commentId
       if (commentId) {
-        const isCancelled = await redis.get(`comment_cancelled:${commentId}`)
+        // Frameback: the Redis flag can expire or be lost; the soft-delete state is authoritative
+        const isCancelled = await redis.get(`comment_cancelled:${commentId}`) || await isCommentDeleted(commentId)
         if (isCancelled) {
           cancelledIds.push(notification.id)
           continue
@@ -534,7 +541,8 @@ export async function flushPendingClientNotifications(projectId: string): Promis
     for (const notification of project.notificationQueue) {
       const commentId = (notification.data as any).commentId
       if (commentId) {
-        const isCancelled = await redis.get(`comment_cancelled:${commentId}`)
+        // Frameback: the Redis flag can expire or be lost; the soft-delete state is authoritative
+        const isCancelled = await redis.get(`comment_cancelled:${commentId}`) || await isCommentDeleted(commentId)
         if (isCancelled) {
           cancelledIds.push(notification.id)
           continue

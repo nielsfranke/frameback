@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rejectCrossOrigin } from '@/lib/same-origin'
 import { rateLimit } from '@/lib/rate-limit'
 import { resolveCommentActor } from '@/lib/comment-actor'
 import { CommentMutationError, editComment, softDeleteComment } from '@/lib/comment-mutations'
@@ -27,6 +28,8 @@ function mutationError(error: unknown) {
 
 // PATCH /api/comments/[id] - edit own comment (client) or any comment (admin)
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const crossOrigin = rejectCrossOrigin(request)
+  if (crossOrigin) return crossOrigin
   const limitedResponse = await limited(request, 'comments-edit')
   if (limitedResponse) return limitedResponse
   const { id } = await params
@@ -46,6 +49,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 // DELETE /api/comments/[id] - soft delete own comment (client) or any comment (admin)
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const crossOrigin = rejectCrossOrigin(request)
+  if (crossOrigin) return crossOrigin
   const limitedResponse = await limited(request, 'comments-delete')
   if (limitedResponse) return limitedResponse
   const { id } = await params

@@ -23,10 +23,14 @@ export class CommentMutationError extends Error {
   }
 }
 
+/** Ownership as a write filter, so the check holds at the moment of writing. */
+const ownerFilter = (actor: CommentActor) =>
+  actor.kind === 'admin' ? {} : { isInternal: false, authorKeyHash: actor.viewerKeyHash ?? '__none__' }
+
 async function loadOwned(commentId: string, actor: CommentActor, projectId?: string) {
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
-    select: { id: true, projectId: true, isInternal: true, authorKeyHash: true, deletedAt: true },
+    select: { id: true, projectId: true, isInternal: true, authorKeyHash: true, deletedAt: true, deletedBy: true },
   })
   // Same answer for "missing" and "other project": no probing of comment ids across shares.
   if (!comment || (projectId && comment.projectId !== projectId)) {
@@ -45,31 +49,38 @@ export async function editComment(params: { commentId: string; content: string; 
   if (!params.content?.trim()) throw new CommentMutationError('INVALID', 'Comment must not be empty')
   const validated = await sanitizeAndValidateContent({ content: params.content })
   if (!validated.valid) throw new CommentMutationError('INVALID', validated.error || 'Invalid content', validated.errorStatus || 400)
-  return prisma.comment.update({
-    where: { id: comment.id },
+  // Conditional write: still not deleted and still owned (no check-then-write race)
+  const res = await prisma.comment.updateMany({
+    where: { id: comment.id, deletedAt: null, ...ownerFilter(params.actor) },
     data: { content: validated.sanitizedContent!, editedAt: new Date() },
-    select: { id: true, content: true, editedAt: true },
   })
+  if (res.count !== 1) throw new CommentMutationError('DELETED', 'Comment was deleted or changed meanwhile', 409)
+  return prisma.comment.findUniqueOrThrow({ where: { id: comment.id }, select: { id: true, content: true, editedAt: true } })
 }
 
 export async function softDeleteComment(params: { commentId: string; actor: CommentActor; projectId?: string }) {
   const comment = await loadOwned(params.commentId, params.actor, params.projectId)
-  if (comment.deletedAt) return { id: comment.id, alreadyDeleted: true }
-  await prisma.comment.update({
-    where: { id: comment.id },
+  const res = await prisma.comment.updateMany({
+    where: { id: comment.id, deletedAt: null, ...ownerFilter(params.actor) },
     data: { deletedAt: new Date(), deletedBy: params.actor.kind === 'admin' ? params.actor.userId : 'client' },
   })
-  // A pending "new comment" email must not announce a deleted comment
+  // Always (also on a repeated delete): a pending "new comment" email must not go out.
+  // The email paths additionally check deletedAt, so a lost Redis flag cannot leak it.
   await cancelCommentNotification(comment.id)
-  return { id: comment.id, alreadyDeleted: false }
+  return { id: comment.id, alreadyDeleted: res.count === 0 }
 }
 
 export async function restoreComment(params: { commentId: string; actor: CommentActor; projectId?: string }) {
   const comment = await loadOwned(params.commentId, params.actor, params.projectId)
   if (!comment.deletedAt) throw new CommentMutationError('NOT_DELETED', 'Comment is not deleted', 409)
-  return prisma.comment.update({
-    where: { id: comment.id },
+  // A deletion by the studio (moderation) can only be undone by an admin
+  if (params.actor.kind === 'client' && comment.deletedBy !== 'client') {
+    throw new CommentMutationError('FORBIDDEN', 'This comment was removed by the studio', 403)
+  }
+  const res = await prisma.comment.updateMany({
+    where: { id: comment.id, deletedAt: { not: null }, ...ownerFilter(params.actor) },
     data: { deletedAt: null, deletedBy: null },
-    select: { id: true },
   })
+  if (res.count !== 1) throw new CommentMutationError('NOT_DELETED', 'Comment is not deleted', 409)
+  return { id: comment.id }
 }

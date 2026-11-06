@@ -81,6 +81,7 @@ cat >> .env <<'EOF'
 FRAMEBACK_IMAGE=frameback:local
 NEXT_PUBLIC_APP_URL=https://review.example.com
 FEATURE_NEW_SHARE=true
+FEATURE_REVIEW_FLOW=true
 EOF
 
 docker compose -p frameback --env-file .env -f deploy/prod/docker-compose.yml up -d

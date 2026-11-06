@@ -78,7 +78,13 @@ export async function restoreComment(params: { commentId: string; actor: Comment
     throw new CommentMutationError('FORBIDDEN', 'This comment was removed by the studio', 403)
   }
   const res = await prisma.comment.updateMany({
-    where: { id: comment.id, deletedAt: { not: null }, ...ownerFilter(params.actor) },
+    where: {
+      id: comment.id,
+      deletedAt: { not: null },
+      ...ownerFilter(params.actor),
+      // Clients can only undo their OWN deletion, also at the moment of writing
+      ...(params.actor.kind === 'client' ? { deletedBy: 'client' } : {}),
+    },
     data: { deletedAt: null, deletedBy: null },
   })
   if (res.count !== 1) throw new CommentMutationError('NOT_DELETED', 'Comment is not deleted', 409)

@@ -74,6 +74,11 @@ services:
       SHARE_TOKEN_SECRET: ${SHARE_TOKEN_SECRET:?SHARE_TOKEN_SECRET is required}
       HTTPS_ENABLED: ${HTTPS_ENABLED:-false}
       TRUST_PROXY: ${TRUST_PROXY:-true}
+      # CSRF allowlist in addition to NEXT_PUBLIC_APP_URL (e.g. the HTTPS staging port)
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      # Frameback feature flags (default off)
+      FEATURE_REVIEW_FLOW: ${FEATURE_REVIEW_FLOW:-false}
+      FEATURE_NEW_SHARE: ${FEATURE_NEW_SHARE:-false}
     volumes:
       - uploads:/app/uploads
     networks: [internal]

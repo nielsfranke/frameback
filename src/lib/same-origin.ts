@@ -1,21 +1,32 @@
 /**
  * Frameback: CSRF protection for cookie-authenticated write endpoints.
  *
- * Browsers send an Origin header on POST/PATCH/DELETE fetches. A write is accepted when
- *  - the Origin matches the request's own host (or NEXT_PUBLIC_APP_URL), or
- *  - there is no Origin but an Authorization: Bearer header (non-browser clients such as
- *    the Resolve MCP – a bearer token cannot be attached by a foreign site).
- * Everything else is refused with 403.
+ * Trust anchor is an explicit allowlist from configuration – never request headers
+ * (Host / X-Forwarded-* can be influenced in front of the app):
+ *   NEXT_PUBLIC_APP_URL            e.g. https://review.example.com
+ *   ALLOWED_ORIGINS (optional)     comma separated extra origins, e.g. the LAN staging URLs
+ *
+ * A write is accepted when
+ *  - its Origin header is in the allowlist, or
+ *  - it has no Origin header but an Authorization: Bearer header. Browsers always send
+ *    Origin on cross-site POST/PATCH/DELETE, and a foreign site cannot attach a bearer
+ *    token (they live in the app's own storage), so this only admits non-browser clients
+ *    such as the Resolve MCP. The route still authenticates that bearer token.
  */
 import { NextRequest, NextResponse } from 'next/server'
 
-function allowedOrigins(request: NextRequest): Set<string> {
+let cached: { key: string; set: Set<string> } | null = null
+
+export function allowedOrigins(): Set<string> {
+  const key = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}|${process.env.ALLOWED_ORIGINS ?? ''}`
+  if (cached?.key === key) return cached.set
   const set = new Set<string>()
-  const host = request.headers.get('x-forwarded-host') || request.headers.get('host')
-  const proto = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '')
-  if (host) set.add(`${proto}://${host}`)
-  set.add(request.nextUrl.origin)
-  try { if (process.env.NEXT_PUBLIC_APP_URL) set.add(new URL(process.env.NEXT_PUBLIC_APP_URL).origin) } catch { /* ignore */ }
+  for (const raw of [process.env.NEXT_PUBLIC_APP_URL, ...(process.env.ALLOWED_ORIGINS ?? '').split(',')]) {
+    const value = raw?.trim()
+    if (!value) continue
+    try { set.add(new URL(value).origin) } catch { /* ignore invalid entries */ }
+  }
+  cached = { key, set }
   return set
 }
 
@@ -26,5 +37,5 @@ export function rejectCrossOrigin(request: NextRequest): NextResponse | null {
     const bearer = request.headers.get('authorization')?.startsWith('Bearer ')
     return bearer ? null : NextResponse.json({ error: 'Origin required' }, { status: 403 })
   }
-  return allowedOrigins(request).has(origin) ? null : NextResponse.json({ error: 'Cross-origin request refused' }, { status: 403 })
+  return allowedOrigins().has(origin) ? null : NextResponse.json({ error: 'Cross-origin request refused' }, { status: 403 })
 }

@@ -2471,7 +2471,7 @@
     "step3Text": "– approve or request changes",
     "yourName": "Your name",
     "noAccount": "No account needed. You can edit and delete your comments on this device at any time.",
-    "start": "Let's go",
+    "start": "Start review",
     "approveTitle": "Approve version {n}?",
     "approveIntro": "By approving you confirm that this video is final.",
     "approveBullet1": "The studio is notified right away.",
@@ -2511,6 +2511,9 @@
     "streamUnavailable": "The video can't be loaded right now.",
     "retry": "Try again",
     "onlyApprovedVersion": "Only available for the approved version",
-    "zipLimit": "The ZIP contains the first 50 files. Download others individually."
+    "zipLimit": "The ZIP contains the first 50 files. Download others individually.",
+    "addComment": "Add a comment",
+    "commentSentCollect": "Comment saved. When you're done: “Request changes”.",
+    "nameHint": "Shown with your comments so the studio knows who wrote them."
   }
 }

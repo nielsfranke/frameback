@@ -2545,7 +2545,7 @@
     "step3Text": "– freigeben oder Änderungen anfordern",
     "yourName": "Dein Name",
     "noAccount": "Kein Konto nötig. Deine Kommentare kannst du auf diesem Gerät jederzeit bearbeiten und löschen.",
-    "start": "Los geht's",
+    "start": "Review starten",
     "approveTitle": "Version {n} freigeben?",
     "approveIntro": "Mit der Freigabe bestätigst du, dass dieses Video so fertig ist.",
     "approveBullet1": "Das Studio wird sofort benachrichtigt.",
@@ -2585,6 +2585,9 @@
     "streamUnavailable": "Das Video kann gerade nicht geladen werden.",
     "retry": "Erneut versuchen",
     "onlyApprovedVersion": "Nur bei der freigegebenen Version verfügbar",
-    "zipLimit": "Das ZIP enthält die ersten 50 Dateien. Weitere einzeln herunterladen."
+    "zipLimit": "Das ZIP enthält die ersten 50 Dateien. Weitere einzeln herunterladen.",
+    "addComment": "Kommentar hinzufügen",
+    "commentSentCollect": "Kommentar gespeichert. Wenn du fertig bist: „Änderungen anfordern“.",
+    "nameHint": "Erscheint bei deinen Kommentaren, damit das Studio weiß, von wem sie sind."
   }
 }

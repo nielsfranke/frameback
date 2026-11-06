@@ -42,6 +42,9 @@ interface Props {
 
 interface Group { name: string; versions: ShareVideo[] } // versions: READY only, newest first
 
+/** Studio names are often file names ("Imagefilm_2026_hoch"); show them readable. */
+const displayName = (name: string) => name.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()
+
 const statusOf = (v: ShareVideo, reviewFlow: boolean): Status => {
   if (v.approved || v.reviewState === 'APPROVED') return 'approved'
   if (!reviewFlow) return 'ready'
@@ -236,7 +239,7 @@ export default function FramebackShareView({
       setComments(await res.json())
       // Clear only what was sent; text typed during the request stays
       setDraft((d) => ({ ...d, [draftKey]: d[draftKey] === raw ? '' : d[draftKey] }))
-      setToast({ text: t('commentSent') })
+      setToast({ text: canRequestChanges ? t('commentSentCollect') : t('commentSent') })
     } catch (e) {
       setToast({ text: e instanceof Error ? e.message : t('failed') })
     } finally {
@@ -408,7 +411,7 @@ export default function FramebackShareView({
               {posters[g.versions[0].id] && <img src={posters[g.versions[0].id]!} alt="" className="h-full w-full object-cover" />}
             </span>
             <span className="flex min-w-0 flex-col gap-0.5">
-              <b className="truncate text-sm font-semibold">{g.name}</b>
+              <b className="line-clamp-2 break-words text-sm font-semibold" title={g.name}>{displayName(g.name)}</b>
               <span className={`flex items-center gap-1.5 text-xs ${statusDot[s]}`}>
                 <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
                 {t(`status.${s}`)}
@@ -477,7 +480,7 @@ export default function FramebackShareView({
                 <span className="aspect-video w-14 flex-none overflow-hidden rounded bg-muted">
                   {posters[current!.id] && <img src={posters[current!.id]!} alt="" className="h-full w-full object-cover" />}
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col"><b className="truncate text-sm">{group.name}</b>
+                <span className="flex min-w-0 flex-1 flex-col"><b className="truncate text-sm">{displayName(group.name)}</b>
                   <span className={`text-xs ${statusDot[statusOf(current!, reviewFlow)]}`}>{t(`status.${statusOf(current!, reviewFlow)}`)}</span></span>
                 <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">{t('itemsCount', { n: groups.length + (project.hasPhotos ? 1 : 0) })}<ChevronDown className="h-4 w-4" /></span>
               </button>
@@ -486,7 +489,7 @@ export default function FramebackShareView({
           )}
 
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-xl font-semibold">{group.name}</h1>
+            <h1 className="text-xl font-semibold break-words">{displayName(group.name)}</h1>
             {group.versions.length > 1 ? (
               <div className="relative">
                 <button ref={verBtn} type="button" onClick={() => setVerMenu((m) => !m)} aria-expanded={verMenu} aria-haspopup="menu" className="inline-flex h-9 items-center gap-2 rounded-lg border bg-card px-3 text-sm font-semibold">
@@ -567,7 +570,7 @@ export default function FramebackShareView({
             {(['comments', 'files'] as const).map((k) => (
               <button key={k} id={`fb-tab-${k}`} role="tab" type="button" aria-selected={tab === k} aria-controls="fb-tabpanel" onClick={() => setTab(k)}
                 className={`-mb-px border-b-2 px-3 py-2.5 text-sm font-semibold ${tab === k ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}>
-                {t(k)}{k === 'files' && !finalAvailable && <Lock className="ml-1.5 inline h-3 w-3 align-[-1px] text-muted-foreground" aria-hidden />}{k === 'comments' && versionComments.filter((c) => !c.deleted).length > 0 && (
+                {t(k)}{k === 'files' && !finalAvailable && <Lock className="ml-1.5 inline h-3 w-3 align-[-1px] text-muted-foreground" aria-label={lockReason}><title>{lockReason}</title></Lock>}{k === 'comments' && versionComments.filter((c) => !c.deleted).length > 0 && (
                   <span className="ml-1.5 inline-grid min-w-5 place-items-center rounded-full bg-muted px-1.5 text-[11px]">{versionComments.filter((c) => !c.deleted).length}</span>
                 )}
               </button>
@@ -578,6 +581,14 @@ export default function FramebackShareView({
           {tab === 'comments' ? (
             <>
               <div className="flex-1 overflow-auto p-3.5">
+                {feedback && !isOld && (
+                  <Button variant="outline" className="mb-3 w-full md:hidden" onClick={() => {
+                    const el = document.getElementById('fb-composer') as HTMLTextAreaElement | null
+                    el?.scrollIntoView({ block: 'center', behavior: 'smooth' }); el?.focus()
+                  }}>
+                    <Pencil className="mr-1.5 h-4 w-4" />{t('addComment')}
+                  </Button>
+                )}
                 {!feedback && <p className="p-4 text-sm text-muted-foreground">{t('feedbackOff')}</p>}
                 {feedback && versionComments.length === 0 && (
                   <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">{t('noComments')}</div>
@@ -592,6 +603,7 @@ export default function FramebackShareView({
                 <div className="border-t p-3.5 pb-6">
                   {canRequestChanges && <p className="mb-2 text-xs text-muted-foreground">{t('composerHint')}</p>}
                   <Textarea
+                    id="fb-composer"
                     value={draft[draftKey] || ''}
                     onChange={(e) => setDraft((d) => ({ ...d, [draftKey]: e.target.value }))}
                     onFocus={() => { setTyping(true); player.current?.pause() }}
@@ -669,6 +681,7 @@ export default function FramebackShareView({
             <li><b className="text-foreground">{t('step3')}</b> {t('step3Text')}</li>
           </ol>
           <label htmlFor="fb-name" className="text-sm font-semibold">{t('yourName')}</label>
+          <p className="-mt-1 text-xs text-muted-foreground">{t('nameHint')}</p>
           <Input id="fb-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           <p className="text-xs text-muted-foreground">{t('noAccount')}</p>
           <DialogFooter><Button onClick={() => { saveName(name); setWelcome(false) }}>{t('start')}</Button></DialogFooter>
@@ -683,7 +696,7 @@ export default function FramebackShareView({
           </DialogHeader>
           <div className="flex items-center gap-3 rounded-xl bg-muted p-3">
             <span className="aspect-video w-24 flex-none overflow-hidden rounded bg-background">{urlsReady && urls?.poster && <img src={urls.poster} alt="" className="h-full w-full object-cover" />}</span>
-            <div><b>{target?.name ?? selected.name}</b><div className="text-sm text-muted-foreground">{t('version', { n: target?.version ?? selected.version })} · {fmtDate(target?.createdAt ?? selected.createdAt)}</div></div>
+            <div><b>{displayName(target?.name ?? selected.name)}</b><div className="text-sm text-muted-foreground">{t('version', { n: target?.version ?? selected.version })} · {fmtDate(target?.createdAt ?? selected.createdAt)}</div></div>
           </div>
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
             <li>{t('approveBullet1')}</li><li>{t('approveBullet2')}</li><li>{t('approveBullet3')}</li>
@@ -693,10 +706,12 @@ export default function FramebackShareView({
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />{t('approveWarnComments', { n: clientCommentIds.length })}
             </p>
           )}
-          <DialogFooter className="flex-wrap gap-2">
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
             <Button variant="ghost" onClick={() => setDialog(null)}>{t('cancel')}</Button>
-            {canRequestChanges && <Button variant="outline" onClick={() => openDialog('changes')}>{t('ratherRequestChanges')}</Button>}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            {canRequestChanges && <Button variant="outline" onClick={() => openDialog('changes')}>{t('requestChanges')}</Button>}
             <Button className="bg-success text-success-foreground hover:bg-success/90" onClick={approve} disabled={deciding}><Check className="mr-1.5 h-4 w-4" />{t('approveConfirm', { n: target?.version ?? selected.version })}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

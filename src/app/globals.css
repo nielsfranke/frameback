@@ -28,7 +28,7 @@
 
     /* Muted - subtle backgrounds */
     --muted: 220 14% 89%;
-    --muted-foreground: 0 0% 45%;
+    --muted-foreground: 0 0% 38%; /* Frameback: was 45% (3.9:1 on background), now ~5:1 for WCAG AA */
 
     /* Accent - tint color */
     --accent: 220 14% 89%;

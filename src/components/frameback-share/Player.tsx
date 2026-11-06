@@ -93,7 +93,12 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
     // The whole player (video + controls) goes fullscreen, so controls stay usable there
     <div ref={frame} onKeyDown={onKey} className="flex flex-col gap-3 [&:fullscreen]:bg-black [&:fullscreen]:p-4 [&:fullscreen]:text-white">
       <div
-        className="relative flex aspect-video max-h-[62vh] w-full items-center justify-center overflow-hidden rounded-xl bg-black [:fullscreen_&]:max-h-none [:fullscreen_&]:flex-1"
+        className={`relative flex items-center justify-center overflow-hidden rounded-xl bg-black [:fullscreen_&]:max-h-none [:fullscreen_&]:flex-1 ${
+          vertical
+            // Portrait: real 9:16 frame, as large as the viewport allows, centered
+            ? 'mx-auto aspect-[9/16] h-[min(70vh,calc((100vw-2rem)*16/9))] max-w-full md:h-[min(70vh,62rem)]'
+            : 'aspect-video max-h-[62vh] w-full'
+        }`}
       >
         <video
           ref={video}
@@ -102,7 +107,7 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
           muted={muted}
           playsInline
           preload="metadata"
-          className={vertical ? 'h-full w-auto max-w-full' : 'h-full w-full object-contain'}
+          className="h-full w-full object-contain"
           onClick={toggle}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
@@ -152,10 +157,11 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
             const s = ((e.clientX - r.left) / r.width) * duration
             if (video.current) video.current.currentTime = Math.max(0, Math.min(duration, s))
           }}
-          className="relative h-9 flex-1 cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          className="relative h-11 flex-1 cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
         >
-          <div className="absolute inset-x-0 top-[15px] h-1 rounded-full bg-muted" />
-          <div className="absolute left-0 top-[15px] h-1 rounded-full bg-primary" style={{ width: `${pct}%` }} />
+          {/* track at the bottom, comment markers on their own row above it */}
+          <div className="absolute inset-x-0 top-[31px] h-1 rounded-full bg-muted" />
+          <div className="absolute left-0 top-[31px] h-1 rounded-full bg-primary" style={{ width: `${pct}%` }} />
           {markers.map((m) => (
             <button
               key={m.id}
@@ -165,13 +171,13 @@ const Player = forwardRef<PlayerHandle, Props>(function Player(
               onKeyDown={(e) => e.stopPropagation()}
               title={m.label}
               aria-label={m.label}
-              className={`absolute top-0 -ml-[13px] flex h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-background text-[9px] font-bold text-white ${m.studio ? 'bg-primary' : 'bg-violet-600'}`}
+              className={`absolute top-0 -ml-[11px] flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-background text-[9px] font-bold text-white shadow-sm before:absolute before:-inset-2 before:content-[''] ${m.studio ? 'bg-primary' : 'bg-violet-600'}`}
               style={{ left: `${duration > 0 ? (m.seconds / duration) * 100 : 0}%` }}
             >
               {m.count > 1 ? m.count : m.label.slice(0, 2)}
             </button>
           ))}
-          <div className="absolute top-[9px] -ml-2 h-4 w-4 rounded-full bg-white shadow ring-4 ring-primary/20" style={{ left: `${pct}%` }} />
+          <div className="absolute top-[25px] -ml-2 h-4 w-4 rounded-full bg-white shadow ring-4 ring-primary/20" style={{ left: `${pct}%` }} />
         </div>
         <button type="button" onClick={() => setMuted((m) => !m)} aria-label={muted ? t('unmute') : t('mute')} className="hidden h-10 w-10 items-center justify-center rounded-lg hover:bg-muted sm:flex">
           {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}

@@ -67,3 +67,7 @@ about.html
 
 # Screenshot tooling
 docs/screenshots/capture.mjs
+
+# Playwright
+test-results/
+playwright-report/

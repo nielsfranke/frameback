@@ -1,0 +1,20 @@
+# CI for the ViTransfer fork on Forgejo.
+# Note: once .forgejo/workflows exists, Forgejo ignores the upstream .github/workflows
+# (Docker Hub publishing, wiki sync, dependabot automerge), which is intended for this fork.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: docker
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci --legacy-peer-deps
+      - run: npx prisma generate
+      - run: npm test
+      - run: npm run lint

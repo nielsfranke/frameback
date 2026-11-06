@@ -1,0 +1,21 @@
+# Rehearsal ("Generalprobe") override for deploy/prod/docker-compose.yml:
+#   - no internet for app/worker/db (no email / push / webhooks to real customers)
+#   - a small Caddy proxy on REHEARSAL_PORT is the only container with an outside port
+#     (Docker cannot publish ports of containers that sit only on an internal network);
+#     the live instance on 4324 keeps running untouched
+# Used by scripts/cutover/cutover.sh rehearsal (compose project "frameback-rehearsal").
+services:
+  app:
+    ports: !reset []
+  proxy:
+    image: caddy:2-alpine
+    command: ["caddy", "reverse-proxy", "--from", ":${REHEARSAL_PORT:-4327}", "--to", "app:4321"]
+    depends_on: [app]
+    ports:
+      - "${REHEARSAL_PORT:-4327}:${REHEARSAL_PORT:-4327}"
+    networks: [backend, edge]
+    security_opt: [no-new-privileges:true]
+networks:
+  backend:
+    internal: true
+  edge: {}

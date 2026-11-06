@@ -1,0 +1,117 @@
+# Frameback production stack – replaces the live ViTransfer stack on the DeskMini.
+#
+#   docker compose -p frameback --env-file ~/frameback/.env \
+#     -f deploy/prod/docker-compose.yml up -d
+#
+# Mirrors the live setup (~/vitransfer): the app publishes APP_PORT (4324),
+# the front proxy for review.example.com keeps pointing at it. Unlike staging, app and
+# worker have internet access (SMTP, web push, webhooks).
+# Same major versions as live (Postgres 16, Redis 7); upgrades happen separately.
+# No container_name: the old vitransfer-* containers stay untouched for rollback.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vitransfer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-vitransfer}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vitransfer}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt: [no-new-privileges:true]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - redis-data:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt: [no-new-privileges:true]
+
+  app:
+    image: ${FRAMEBACK_IMAGE:?FRAMEBACK_IMAGE is required (pinned tag, e.g. vitransfer-next:<sha>)}
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    environment: &appenv
+      NODE_ENV: production
+      TZ: ${TZ:-UTC}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vitransfer}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vitransfer}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      STORAGE_ROOT: /app/uploads
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      # ENCRYPTION_KEY must equal the live value (stored share passwords, SMTP password).
+      # JWT/share secrets are NEW at cutover: everyone signs in again once, and tokens
+      # revoked on live (Redis blacklist) can never come back.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      SHARE_TOKEN_SECRET: ${SHARE_TOKEN_SECRET:?SHARE_TOKEN_SECRET is required}
+      HTTPS_ENABLED: ${HTTPS_ENABLED:-true}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      NEXT_PUBLIC_SOURCE_CODE_URL: ${NEXT_PUBLIC_SOURCE_CODE_URL:-}
+      FEATURE_REVIEW_FLOW: ${FEATURE_REVIEW_FLOW:-false}
+      FEATURE_NEW_SHARE: ${FEATURE_NEW_SHARE:-false}
+    ports:
+      - "${APP_PORT:-4324}:4321"
+    volumes:
+      - uploads:/app/uploads
+    networks: [backend]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4321/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+
+  worker:
+    image: ${FRAMEBACK_IMAGE}
+    restart: unless-stopped
+    command: npm run worker
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      app: {condition: service_healthy}
+    environment: *appenv
+    volumes:
+      - uploads:/app/uploads
+    networks: [backend]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep -q 'npm run worker' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 6m
+
+volumes:
+  postgres-data:
+  redis-data:
+  uploads:
+
+networks:
+  backend: {}

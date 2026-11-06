@@ -4,9 +4,12 @@
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 STAGE_DIR="${STAGE_DIR:-~/vitransfer-next}"
-PROJECT="vitransfer-next"
+# Reusable for the cutover: PROJECT, ENV_FILE, COMPOSE_ARGS and REPORT_MODE can be overridden
+PROJECT="${PROJECT:-vitransfer-next}"
+ENV_FILE="${ENV_FILE:-$STAGE_DIR/.env}"
 LIVE_PG_CONTAINER="${LIVE_PG_CONTAINER:-vitransfer-postgres}"
-compose() { docker compose -p "$PROJECT" --env-file "$STAGE_DIR/.env" -f "$REPO_DIR/deploy/next/docker-compose.yml" "$@"; }
+COMPOSE_ARGS="${COMPOSE_ARGS:--f $REPO_DIR/deploy/next/docker-compose.yml}"
+compose() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" $COMPOSE_ARGS "$@"; }
 
 TABLES='Project Video Comment VideoAsset PhotoAlbum Photo User ProjectRecipient ClientCompany ProjectUpload'
 SQL="SELECT json_object_agg(t, n) FROM ("
@@ -18,4 +21,5 @@ LIVE_COUNTS="$(printf '%s\n' "$SQL" | docker exec -i "$LIVE_PG_CONTAINER" sh -c 
 compose run --rm --no-deps -T \
   -v "$REPO_DIR/scripts/staging:/report:ro" \
   -e LIVE_COUNTS_JSON="$LIVE_COUNTS" \
+  -e REPORT_MODE="${REPORT_MODE:-staging}" \
   --entrypoint "" app sh -c 'cp /report/report.ts /app/.staging-report.ts && cd /app && npx tsx .staging-report.ts'

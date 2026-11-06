@@ -129,7 +129,9 @@ async function sanitized() {
 async function main() {
   const health = await fetch(BASE + '/api/health').then((r) => r.status).catch(() => 0)
   record('app health', health === 200, `status ${health}`)
-  for (const step of [counts, files, shares, outbound, sanitized]) {
+  // In production the app must reach SMTP/push: skip the isolation checks there
+  const isolated = process.env.REPORT_MODE !== 'production'
+  for (const step of isolated ? [counts, files, shares, outbound, sanitized] : [counts, files, shares]) {
     try { await step() } catch (e) { record(step.name, false, String(e)) }
   }
   const w = Math.max(...results.map((r) => r.name.length))

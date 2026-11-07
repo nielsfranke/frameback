@@ -57,4 +57,17 @@ log "Flushing staging redis (sessions start fresh, like the planned cutover)"
 
 log "Starting app, worker and proxy"
 compose up -d
+
+log "Checking the proxy (caddy only reads its config on start, so test it now)"
+STAGING_HOST="$(envval STAGING_HOST)"
+for url in "http://$STAGING_HOST:4325/" "https://$STAGING_HOST:4326/api/server-info"; do
+  code=000
+  for _ in $(seq 1 15); do
+    code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "$url" || true)"
+    [[ "$code" == 200 ]] && break
+    sleep 2
+  done
+  [[ "$code" == 200 ]] || { echo "proxy check failed: $url -> $code" >&2; compose logs --tail 20 caddy >&2; exit 1; }
+  echo "ok  $url"
+done
 echo "Staging: $APP_DOMAIN  (run scripts/staging/report.sh for the check report)"

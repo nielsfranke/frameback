@@ -3,6 +3,11 @@
 #   docker compose -p vitransfer-next --env-file ~/vitransfer-next/.env \
 #     -f deploy/next/docker-compose.yml up -d
 #
+# Shortcut on the staging host: deploy/next/.env is a (gitignored) symlink to
+# ~/vitransfer-next/.env, which also sets COMPOSE_PROJECT_NAME, so a plain
+# `docker compose up -d <service>` inside deploy/next/ hits the right stack.
+#   ln -s ~/vitransfer-next/.env deploy/next/.env
+#
 # Isolation from live:
 #  - no container_name (avoids clashes with the live vitransfer-* containers)
 #  - own volumes and networks (compose project "vitransfer-next")

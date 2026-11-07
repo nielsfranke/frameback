@@ -93,6 +93,12 @@ The app is published on `APP_PORT`. Put it behind a reverse proxy with TLS. For 
 
 Frameback uses the same database and storage layout. All its migrations are additive, so existing projects, comments and **share links keep working**. Keep your `ENCRYPTION_KEY`, because stored share passwords and SMTP credentials are encrypted with it. Take a database backup first. [`scripts/cutover/cutover.sh`](scripts/cutover/cutover.sh) is the script we used to move a live instance with about a minute of downtime and automatic rollback. Read it before you use it, because it is written for our setup.
 
+**Everyone signs in again after the switch.** The script generates new `JWT_SECRET`, `JWT_REFRESH_SECRET` and `SHARE_TOKEN_SECRET` and starts with an empty Redis (otherwise revoked tokens would become valid again). Share **links** stay valid, but:
+
+- studio users log in again,
+- clients re-enter the share password or e-mail code,
+- API clients such as resolve-studio-mcp get `401` on their old session and must repeat the device-code login once (in the MCP: run the login tool again).
+
 ## Development
 
 ```bash

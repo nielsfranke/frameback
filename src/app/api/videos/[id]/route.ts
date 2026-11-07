@@ -178,8 +178,9 @@ export async function PATCH(
     // Frameback: rename (moves THIS version to the group of the new name, like the old
     // name-based grouping the Resolve MCP relies on), label and approval override are
     // applied atomically under the group lock. Approval stays exclusive, never notifies.
+    let result: Awaited<ReturnType<typeof adminUpdateVersion>>
     try {
-      await adminUpdateVersion({
+      result = await adminUpdateVersion({
         videoId: id,
         name: name !== undefined ? name.trim() : undefined,
         versionLabel: versionLabel !== undefined ? versionLabel.trim() : undefined,
@@ -202,7 +203,9 @@ export async function PATCH(
       logMessage('[VIDEO-APPROVAL] Admin approval - emails NOT sent (by design)')
     }
 
-    return NextResponse.json({ success: true })
+    // `approved` = final state of this version; `unapproved` = other versions that lost their
+    // approval through this request (approval is exclusive per video). Additive to `success`.
+    return NextResponse.json({ success: true, approved: result.approved, unapproved: result.unapproved })
   } catch (error) {
     return NextResponse.json(
       { error: videoMessages.failedToUpdateVideoApproval || 'Failed to update video approval' },

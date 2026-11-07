@@ -347,6 +347,8 @@ async function overrideInTx(
  *    already has an approved version, the moved one loses its approval; a clashing
  *    version number is refused (VERSION_CONFLICT).
  *  - approved: override for any version, always exclusive, never notifies, no-op if unchanged.
+ * Returns the final approval of this version and `unapproved`: the ids of OTHER versions
+ * that lost their approval through this edit (exclusivity), empty if none.
  */
 export async function adminUpdateVersion(
   params: {
@@ -367,6 +369,13 @@ export async function adminUpdateVersion(
     // so a concurrent rename cannot leave name and group out of sync.
     const targetGroupId = newName !== undefined ? await ensureGroup(pre.projectId, newName, tx) : null
     const video = await lockedVideo(tx, params.videoId, targetGroupId ? [targetGroupId] : [])
+    // Both groups are locked: snapshot approvals to report what this edit took away from
+    // OTHER versions (exclusivity), so callers like the Resolve MCP can show it.
+    const touchedGroups = [video.groupId, ...(targetGroupId ? [targetGroupId] : [])]
+    const approvedIn = async () =>
+      (await tx.video.findMany({ where: { groupId: { in: touchedGroups }, approved: true }, select: { id: true } }))
+        .map((v) => v.id)
+    const approvedBefore = await approvedIn()
 
     let effectiveGroup = video.groupId
     if (targetGroupId && targetGroupId !== video.groupId) {
@@ -406,7 +415,12 @@ export async function adminUpdateVersion(
         { adminUserId: params.adminUserId, actorName: params.actorName }
       )
     }
-    return { changedApproval }
+    const approvedAfter = new Set(await approvedIn())
+    return {
+      changedApproval,
+      approved: approvedAfter.has(video.id),
+      unapproved: approvedBefore.filter((id) => id !== video.id && !approvedAfter.has(id)),
+    }
   })
 }
 

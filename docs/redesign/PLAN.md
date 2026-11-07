@@ -340,11 +340,14 @@ Die Entscheidungsregel `ALL` kommt später.
 | Endpunkt | Muss erhalten bleiben |
 |---|---|
 | `/api/auth/device/*`, `/refresh`, `/logout` | Ablauf, rotierende Refresh-Token-Familien (Wiederverwendung widerruft die Sitzung) |
-| `GET /api/projects`, `GET /api/projects/:id` | alle heutigen Felder (siehe v1). Gelöschte Kommentare entfallen. Neue Felder nur zusätzlich. |
+| `GET /api/projects`, `GET /api/projects/:id` | alle heutigen Felder (siehe v1). Gelöschte Kommentare entfallen. **Ausnahme:** Ein gelöschter Kommentar mit noch lebenden Antworten bleibt als leerer Platzhalter (`deleted: true`, `content: ""`, `authorName: null`), damit der Thread erhalten bleibt; das MCP muss ihn überspringen. Neue Felder nur zusätzlich. |
 | `POST /api/videos`, `GET`/`DELETE /api/videos/:id` | Lebenszyklus inklusive „fehlgeschlagener Upload löscht den eigenen UPLOADING-Platzhalter“ |
-| `PATCH /api/videos/:id {approved}` | **Admin-Override** für beliebige Versionen, ohne Benachrichtigung, Rücklesen ergibt den gesetzten Wert |
+| `PATCH /api/videos/:id {approved}` | **Admin-Override** für beliebige Versionen, ohne Benachrichtigung, Rücklesen ergibt den gesetzten Wert. Antwort (07.11., zusätzlich zu `success`): `approved` (Endzustand dieser Version) und `unapproved: [ids]` (andere Versionen, die durch die Exklusivität ihre Freigabe verloren haben) |
 | tus `/api/uploads` | `Location` same-origin, Wiederaufnahme |
 | `GET /login` mit `__STORAGE_PROVIDER__` | bis das MCP auf `/api/server-info` umgestellt ist |
+| `GET /api/server-info` (neu 07.11., öffentlich) | `storageProvider` (`local`/`s3`), `features` (wächst nur; z. B. `video-patch-unapproved`) |
+
+**Absicherung:** `tests/integration/mcp-contract.test.ts` ruft die echten Route-Handler gegen die Test-DB auf (nur Admin-Auth und Rate-Limit gestubbt) und läuft in CI. Die Live-Suite des MCP (`resolve-studio-mcp`, Live-Modus) bleibt der zweite Teil von „MCP-Suite grün“ und läuft gegen Staging bzw. nach dem Umstieg.
 | `/share/<slug>`, `/api/share/[token]/*` | Pfade, Slugs, Verhalten pro `authMode` inklusive `BOTH`, Gast, Fotos only |
 
 ### 6.2 Neue Endpunkte (`/api/v2`)

@@ -71,6 +71,7 @@
     "vitest": "^5.1.1"
   },
   "overrides": {
+    "effect": "^3.22.5",
     "deepmerge-ts": "^8.0.0",
     "postcss-selector-parser": "^7.1.6",
     "readdir-glob": {
